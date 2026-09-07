@@ -1,17 +1,18 @@
 #pragma once
 #include <torch/torch.h>
 #include "Properties.hpp"
+#include "TensorImpl.hpp"
 #include <optional>
 #include <tuple>
 #include <stdexcept>
 
 namespace PyTorch {
-    static at::Tensor ToTorchValue(const Data::Array& value) {
-        throw std::runtime_error("Data::TensorProperty to at::Tensor mapping is not implemented yet");
+    static at::Tensor ToTorchValue(const Data::Tensor& value) {
+        return ToTorchTensor(value);
     }
 
-    static Data::Array FromTorchValue(const at::Tensor& value) {
-        throw std::runtime_error("at::Tensor to Data::TensorProperty mapping is not implemented yet");
+    static Data::Tensor FromTorchValue(const at::Tensor& value) {
+        return FromTorchTensor(value);
     }
 
     template<typename TValue>

@@ -208,6 +208,8 @@ for %%F in (c10.dll torch_cpu.dll libiomp5md.dll uv.dll cupti64_2024.3.2.dll cud
     <ClInclude Include="Helpers.hpp" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="Properties.hpp" />
+    <ClInclude Include="TensorFromTypedArrayProcessor.hpp" />
+    <ClInclude Include="TensorImpl.hpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <Import Project="$(VcpkgRoot)\scripts\buildsystems\msbuild\vcpkg.targets" Condition="Exists('$(VcpkgRoot)\scripts\buildsystems\msbuild\vcpkg.targets')" />

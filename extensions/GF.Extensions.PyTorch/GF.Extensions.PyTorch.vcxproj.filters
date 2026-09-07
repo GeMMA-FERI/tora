@@ -197,6 +197,12 @@
     <ClInclude Include="Helpers.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="TensorImpl.hpp">
+      <Filter>Header Files\Internal</Filter>
+    </ClInclude>
+    <ClInclude Include="TensorFromTypedArrayProcessor.hpp">
+      <Filter>Header Files\Processors</Filter>
+    </ClInclude>
     <ClInclude Include="generated\nodes\*.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
