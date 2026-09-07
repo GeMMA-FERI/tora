@@ -1,4 +1,5 @@
 import type { ArgKind, TorchArgument, TorchReturn } from "./types.js";
+import { makePortLabel } from "./portLabels.js";
 
 const INPUT_TYPE_TEMPLATES: Record<ArgKind, string> = {
   Tensor: 'Data::TensorProperty<"{label}", "">',
@@ -30,7 +31,7 @@ export function renderInputAliasType(arg: TorchArgument): string {
   if (arg.list) labels.push("list");
   if (arg.kwOnly) labels.push("kw_only");
   const suffix = labels.length ? ` (${labels.join(",")})` : "";
-  return withLabel(base, `${arg.name}${suffix}`);
+  return withLabel(base, `${makePortLabel(arg.name, "input")}${suffix}`);
 }
 
 export function renderReturnAliasType(ret: TorchReturn, index: number): string {
@@ -40,5 +41,5 @@ export function renderReturnAliasType(ret: TorchReturn, index: number): string {
   if (ret.optional) labels.push("optional");
   if (ret.list) labels.push("list");
   const suffix = labels.length ? ` (${labels.join(",")})` : "";
-  return withLabel(base, `${name}${suffix}`);
+  return withLabel(base, `${makePortLabel(name, "output")}${suffix}`);
 }
