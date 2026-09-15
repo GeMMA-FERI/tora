@@ -6,7 +6,9 @@
 
 #include <algorithm>
 #include <limits>
+#include <sstream>
 #include <stdexcept>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -392,5 +394,77 @@ namespace PyTorch
             options).clone();
 
         return FromTorchTensor(std::move(tensor));
+    }
+
+    inline std::vector<double> ParseTensorValues(std::string text)
+    {
+        for (char& character : text) {
+            if (character == ',' || character == ';' ||
+                character == '[' || character == ']') {
+                character = ' ';
+            }
+        }
+
+        std::istringstream stream(text);
+        std::vector<double> values;
+        double value = 0.0;
+        while (stream >> value) {
+            values.push_back(value);
+        }
+
+        Core::throw_if_false(
+            stream.eof(),
+            "Tensor values contain an invalid floating-point number.");
+        return values;
+    }
+
+    inline std::vector<Core::Int64> ParseTensorDimensions(std::string text)
+    {
+        for (char& character : text) {
+            if (character == ',' || character == ';' ||
+                character == '[' || character == ']') {
+                character = ' ';
+            }
+        }
+
+        std::istringstream stream(text);
+        std::vector<Core::Int64> dimensions;
+        Core::Int64 dimension = 0;
+        while (stream >> dimension) {
+            dimensions.push_back(dimension);
+        }
+
+        Core::throw_if_false(
+            stream.eof(),
+            "Tensor dimensions contain an invalid integer.");
+        return dimensions;
+    }
+
+    inline Data::Tensor TensorFromText(Data::String const& valuesText, Data::String const& dimensionsText)
+    {
+        const std::string valuesString(
+            static_cast<char const*>(valuesText.data()),
+            valuesText.size());
+        const std::string dimensionsString(
+            static_cast<char const*>(dimensionsText.data()),
+            dimensionsText.size());
+
+        const auto values = ParseTensorValues(valuesString);
+        const auto dimensions = ParseTensorDimensions(dimensionsString);
+        return TensorFromTypedArray(
+            Data::TypedArray(values),
+            Data::TypedArray(dimensions));
+    }
+
+    inline Data::String TensorToText(Data::Tensor const& value)
+    {
+        const at::Tensor tensor = ToTorchTensor(value)
+            .detach()
+            .to(torch::kCPU)
+            .contiguous();
+
+        std::ostringstream stream;
+        stream << tensor;
+        return Data::String(stream.str());
     }
 }
