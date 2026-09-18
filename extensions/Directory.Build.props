@@ -1,7 +1,8 @@
 <Project>
 
   <PropertyGroup>
-    <BuildOutDir>$([MSBuild]::NormalizeDirectory('$(GemmaFusionSdkDir)', '_build', '$(Platform)', '$(Configuration)'))</BuildOutDir>
+    <!-- Anchor outputs to the repository; GFSDK.props is imported later. -->
+    <BuildOutDir>$([MSBuild]::NormalizeDirectory('$(MSBuildThisFileDirectory)', '_build', '$(Platform)', '$(Configuration)'))</BuildOutDir>
     <OutDir>$([MSBuild]::NormalizeDirectory('$(BuildOutDir)', 'bin', '$(MSBuildProjectName)'))</OutDir>
     <IntDir>$([MSBuild]::NormalizeDirectory('$(BuildOutDir)', 'obj', '$(MSBuildProjectName)'))</IntDir>
   </PropertyGroup>
