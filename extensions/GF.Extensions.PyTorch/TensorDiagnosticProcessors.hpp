@@ -6,16 +6,16 @@ struct TensorFromTextProcessor : GF::Extensions::impl::DataProcessorBridgeImpl<T
     static constexpr auto name() { return std::string_view("Tensor From Text"); }
     static constexpr auto description() { return std::string_view("Creates a Float64 CPU tensor from comma- or whitespace-separated values and dimensions."); }
     static constexpr auto interface_id() { return Core::interfaces::interface_id_storage<GF::Interfaces::Ext::IDataProcessor>::value; }
+    static ::Data::Properties create_metadata() {
+        ::Data::Properties metadata;
+        AddNamespace<PyTorch::NodeNamespaces::Convolution>(metadata);
+        AddMaintainer<"Mitko Nikov">(metadata);
+        return metadata;
+    }
 
     // {8D9BE809-5B45-4C53-91ED-B7923B005317}
-    static constexpr auto implementation_id()
-    {
-        return Core::Uuid(0x8d9be809, 0x5b45, 0x4c53, { 0x91, 0xed, 0xb7, 0x92, 0x3b, 0x00, 0x53, 0x17 });
-    }
-    static auto create_instance()
-    {
-        return Core::make_base_obj<TensorFromTextProcessor>().as<Core::Object>();
-    }
+    static constexpr auto implementation_id() { return Core::Uuid(0x8d9be809, 0x5b45, 0x4c53, { 0x91, 0xed, 0xb7, 0x92, 0x3b, 0x00, 0x53, 0x17 }); }
+    static auto create_instance() { return Core::make_base_obj<TensorFromTextProcessor>().as<Core::Object>(); }
 
     using In_values = Data::StringProperty<"Values", "Comma- or whitespace-separated floating-point values.">;
     using In_dimensions = Data::StringProperty<"Dimensions", "Comma- or whitespace-separated integral dimensions.">;

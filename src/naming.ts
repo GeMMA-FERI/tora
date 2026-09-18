@@ -14,7 +14,8 @@ export function toPascalCase(input: string): string {
 
 export function makeNodeClassName(fn: TorchFunction): string {
   const overload = fn.overloadName ? `_${fn.overloadName}` : "";
-  return `${toPascalCase(fn.baseName + overload)}Processor`;
+  const suffix = signatureUuid(fn.schemaSignature).replaceAll("-", "");
+  return `${toPascalCase(fn.baseName + overload)}Processor_${suffix}`;
 }
 
 export function makeDisplayName(fn: TorchFunction): string {

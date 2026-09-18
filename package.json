@@ -4,6 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "review:operations": "npm run build && node scripts/review-operations.mjs",
+    "test": "npm run build && node --test tests/*.test.mjs",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/cli.js",
     "gen": "npm run build && node dist/cli.js",

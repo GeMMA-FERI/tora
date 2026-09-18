@@ -7,12 +7,27 @@
 #include <stdexcept>
 
 namespace PyTorch {
+    namespace NodeNamespaces {
+        // These are sub-namespaces under PyTorch.
+        // The Node Editor treats them as "groups" of extensions.
+        // This helps the Node Editor organize them nicely in the context menus.
+        inline constexpr auto Convolution = Core::StringLiteral("PyTorch::Convolution");
+    }
+
     static at::Tensor ToTorchValue(const Data::Tensor& value) {
         return ToTorchTensor(value);
     }
 
     static Data::Tensor FromTorchValue(const at::Tensor& value) {
         return FromTorchTensor(value);
+    }
+
+    static Core::Bool FromTorchValue(const bool& value) {
+        return Core::Bool(value);
+    }
+
+    static Core::Int64 FromTorchValue(const c10::ScalarType& value) {
+        return Core::Int64(value);
     }
 
     template<typename TValue>

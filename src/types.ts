@@ -35,6 +35,9 @@ export interface TorchReturn {
 }
 
 export interface TorchFunction {
+  namespace?: string;
+  displayName?: string;
+  description?: string;
   rawFunc: string;
   baseName: string;
   overloadName?: string;

@@ -8,7 +8,7 @@ function safeAliasName(input: string): string {
 
 export function renderNodeDefinition(fn: TorchFunction): string {
   const className = makeNodeClassName(fn);
-  const displayName = makeDisplayName(fn);
+  const displayName = fn.displayName ?? makeDisplayName(fn);
   const cppFunctionName = fn.overloadName && fn.args.some((arg) => arg.rawType.includes("!"))
     ? `${fn.baseName}_outf`
     : fn.baseName;
@@ -62,12 +62,19 @@ export function renderNodeDefinition(fn: TorchFunction): string {
           .join("\n");
 
   return `struct ${className} : GF::Extensions::impl::DataProcessorBridgeImpl<${className}> {
-    static constexpr auto name() { return std::string_view("${displayName}"); }
-    static constexpr auto description() { return std::string_view("Auto-generated from PyTorch signature: ${fn.rawFunc}"); }
+    static constexpr auto name() { return std::string_view(${JSON.stringify(displayName)}); }
+    static constexpr auto description() { return std::string_view(${JSON.stringify(fn.description ?? `Auto-generated from PyTorch signature: ${fn.rawFunc}`)}); }
     static constexpr auto interface_id() { return Core::interfaces::interface_id_storage<GF::Interfaces::Ext::IDataProcessor>::value; }
     // {${uuid.toUpperCase()}}
     static constexpr auto implementation_id() { return ${uuidToCppCtor(uuid)}; }
     static auto create_instance() { return Core::make_base_obj<${className}>().as<Core::Object>(); }
+
+    static ::Data::Properties create_metadata()
+    {
+        ::Data::Properties metadata;
+        AddNamespace<${JSON.stringify(fn.namespace ?? "PyTorch::Uncategorized")}>(metadata);
+        return metadata;
+    }
 
 ${inputAliases}
 ${outputAliases}

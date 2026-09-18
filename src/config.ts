@@ -6,7 +6,7 @@ export const DEFAULT_SOURCE =
 export const defaultConfig: GeneratorConfig = {
   source: DEFAULT_SOURCE,
   outDir: "extensions/GF.Extensions.PyTorch/generated",
-  allowlistPath: "config/op_allowlist_v1.txt",
+  allowlistPath: "config/operations.yaml",
   subset: {
     includeInternal: false,
     includeInplace: false,
@@ -14,6 +14,6 @@ export const defaultConfig: GeneratorConfig = {
     includeMethods: false,
     requireTensorInput: true,
     requireTensorOutput: true,
-    maxOps: 250
+    maxOps: Number.POSITIVE_INFINITY
   }
 };
