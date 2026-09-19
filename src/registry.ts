@@ -1,4 +1,5 @@
-import { makeNodeClassName, signatureUuid } from "./naming.js";
+import { makeDisplayName, makeNodeClassName, signatureUuid } from "./naming.js";
+import { EDITOR_PROFILE, editorTypeForProperty } from "./editor.js";
 import { inputPortKey, outputPortKey, renderInputAliasType, renderReturnAliasType } from "./templates.js";
 import type { TorchFunction } from "./types.js";
 
@@ -7,12 +8,15 @@ import type { TorchFunction } from "./types.js";
 export function buildNodeRegistry(functions: TorchFunction[]) {
   return {
     version: 1 as const,
+    editorProfile: EDITOR_PROFILE,
     operations: functions.map(fn => ({
       operator: `aten.${fn.baseName}.${fn.overloadName || "default"}`,
       schema: fn.rawFunc,
       schemaSignature: fn.schemaSignature,
       implementationId: signatureUuid(fn.schemaSignature),
       className: makeNodeClassName(fn),
+      name: fn.displayName ?? makeDisplayName(fn),
+      description: fn.description ?? `Auto-generated from PyTorch signature: ${fn.rawFunc}`,
       inputs: fn.args.map(arg => ({
         argument: arg.name,
         key: inputPortKey(arg),
@@ -23,6 +27,7 @@ export function buildNodeRegistry(functions: TorchFunction[]) {
         keywordOnly: arg.kwOnly,
         defaultExpression: arg.defaultValue,
         cppPropertyType: renderInputAliasType(arg),
+        editorType: editorTypeForProperty(renderInputAliasType(arg)),
       })),
       outputs: fn.returns.map((ret, index) => ({
         index,
@@ -33,6 +38,7 @@ export function buildNodeRegistry(functions: TorchFunction[]) {
         optional: ret.optional,
         list: ret.list,
         cppPropertyType: renderReturnAliasType(ret, index),
+        editorType: editorTypeForProperty(renderReturnAliasType(ret, index)),
       })),
     })),
   };

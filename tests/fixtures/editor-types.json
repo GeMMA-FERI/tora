@@ -1,0 +1,87 @@
+{
+  "sources": [
+    "if.json",
+    "iter1.json"
+  ],
+  "properties": {
+    "TensorProperty": {
+      "Description": "Created Float64 CPU tensor.",
+      "ValueType": 17,
+      "ClassType": "struct Data::Tensor",
+      "InterfaceType": "struct Data::Interfaces::ITensor"
+    },
+    "StringProperty": {
+      "Description": "Comma- or whitespace-separated floating-point values.",
+      "ValueType": 19,
+      "ClassType": "struct Data::String",
+      "InterfaceType": "struct Data::Interfaces::IString"
+    },
+    "IntegralProperty": {
+      "Description": "A",
+      "ValueType": 5,
+      "ClassType": "__int64",
+      "InterfaceType": "__int64"
+    },
+    "BooleanProperty": {
+      "Description": "Result of the comparison operation",
+      "ValueType": 15,
+      "ClassType": "struct Core::Bool",
+      "InterfaceType": "struct Core::Bool"
+    },
+    "EnumProperty": {
+      "Description": "Comparison operator",
+      "ValueType": 17,
+      "ClassType": "struct Data::Enum",
+      "InterfaceType": "struct Data::Interfaces::IEnum"
+    },
+    "NumericProperty": {
+      "Description": "A",
+      "ValueType": 13,
+      "ClassType": "double",
+      "InterfaceType": "double"
+    }
+  },
+  "genericInputs": {
+    "Properties": {
+      "A": "Int64",
+      "B": "Int64"
+    }
+  },
+  "genericInputBase": {
+    "Name": "Generic Inputs",
+    "Description": "",
+    "Inputs": {},
+    "Outputs": {
+      "A": {
+        "Description": "Generic IO of type Int64",
+        "ValueType": 5,
+        "ClassType": "Int64",
+        "InterfaceType": "Int64"
+      },
+      "B": {
+        "Description": "Generic IO of type Int64",
+        "ValueType": 5,
+        "ClassType": "Int64",
+        "InterfaceType": "Int64"
+      }
+    }
+  },
+  "genericOutputs": {
+    "Properties": {
+      "Result": "String"
+    }
+  },
+  "genericOutputBase": {
+    "Name": "Generic Outputs",
+    "Description": "",
+    "Inputs": {
+      "Result": {
+        "Description": "Generic IO of type String",
+        "ValueType": 19,
+        "ClassType": "String",
+        "InterfaceType": "String"
+      }
+    },
+    "Outputs": {}
+  }
+}

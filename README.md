@@ -33,8 +33,25 @@ keys, schema types, and C++ property types. Terminal keys include the existing
 optional/list/keyword-only suffixes and are shared with C++ generation.
 Defaults are recorded as `defaultExpression` schema text, not evaluated values.
 The registry describes generated bindings; inclusion does not certify runtime
-support. It does not yet contain the editor's numeric type IDs or built-in nodes.
+support. Each port includes `editorType` with the editor's numeric `ValueType`,
+`ClassType`, and `InterfaceType`; the registry also records node names and
+descriptions for graph snapshots.
 Keep it with the extension generated from the same schema and configuration.
+
+The `editorProfile` identifies the Windows/MSVC serialization mapping in
+`src/editor.ts`. The initial `gemmafusionsuite-msvc-v1` profile was checked against
+the SDK's `Data::Structures::ValueType` enum and property aliases, and against
+the supplied `if.json` and `iter1.json` exports. Selected metadata from those
+exports is retained in `tests/fixtures/editor-types.json` for regression tests.
+This profile is explicit rather than assumed portable across SDKs or compilers.
+It describes serialization types, not permission to convert between them.
+
+`genericIO()` builds definitions and instance metadata for the existing Generic
+Inputs and Generic Outputs nodes. Native types use the editor's short enum-name
+form; tensor ports use the extended object form. Dynamic metadata uses
+`ClassName`, whereas `NodeBases` snapshots use `ClassType`. Tensor metadata is
+checked against the importer's implementation; execution in the editor remains
+to be verified with the forthcoming graph exporter.
 
 ## Graph compiler in progress
 
@@ -71,8 +88,8 @@ Lists, mutation, optional outputs, conversions, tensor resources, control flow,
 and symbolic constraints are not supported in this first binding pass.
 
 The result is an intermediate binding plan, not an importable NodeGraph file.
-Python capture, editor type metadata, built-in nodes, and graph serialization are
-the next layers. The generator's existing CLI remains unchanged.
+Python capture and graph serialization are the next layers. The generator's
+existing CLI remains unchanged.
 
 To download libtorch headers, run:
 
