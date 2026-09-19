@@ -50,8 +50,8 @@ It describes serialization types, not permission to convert between them.
 Inputs and Generic Outputs nodes. Native types use the editor's short enum-name
 form; tensor ports use the extended object form. Dynamic metadata uses
 `ClassName`, whereas `NodeBases` snapshots use `ClassType`. Tensor metadata is
-checked against the importer's implementation; execution in the editor remains
-to be verified with the forthcoming graph exporter.
+checked against the importer's implementation; import and execution in the
+running editor remain to be verified.
 
 ## Graph compiler in progress
 
@@ -87,9 +87,45 @@ An optional null literal represents an absent input value for future lowering.
 Lists, mutation, optional outputs, conversions, tensor resources, control flow,
 and symbolic constraints are not supported in this first binding pass.
 
-The result is an intermediate binding plan, not an importable NodeGraph file.
-Python capture and graph serialization are the next layers. The generator's
-existing CLI remains unchanged.
+The binder result is an intermediate plan. `exportNodeGraph()` in
+`src/graphExporter.ts` lowers that plan to the editor's `Nodes`, `Edges`, and
+`NodeBases` format. Python capture is not implemented yet.
+
+## Exporting a NodeGraph
+
+Generate a registry with the current generator, then export a program:
+
+```powershell
+npm run gen -- --source _build/native_functions.yaml
+npm run graph -- --program examples/add-relu.program.json --registry extensions/GF.Extensions.PyTorch/generated/registry.json --out _build/add-relu.nodegraph.json
+```
+
+Use a local schema matching the installed PyTorch extension. To generate only
+the sample's registry and C++ definitions in a separate directory, use:
+
+```powershell
+npm run gen -- --source _build/native_functions.yaml --out _build/graph-example-extension --include '^(add\.Tensor|relu)$'
+npm run graph -- --program examples/add-relu.program.json --registry _build/graph-example-extension/registry.json --out _build/add-relu.nodegraph.json
+```
+
+The graph command validates document structure, registry profile, and binding
+before writing output. Older registries without editor metadata must be
+regenerated. A binding/validation failure leaves an existing output untouched.
+The program and registry paths cannot also be the output path.
+
+The example exports Generic Inputs (`x`, `y`), Add, ReLU, and Generic Outputs
+(`result`). Add stores `alpha=1` in `Properties`. Connections use current terminal
+keys; optional `None` values are omitted from saved properties. Nodes receive
+fresh instance UUIDs on each export and a layout based on dependency depth.
+Repeated operations share their implementation's `NodeBases` snapshot while
+retaining separate instances.
+
+Import `_build/add-relu.nodegraph.json` in GemmaFusionSuite with the matching
+extension installed. The file defines an interface with tensor inputs; it does
+not embed test tensors or model weights. Supply `x` and `y` through the graph's
+input mechanism to execute it. With `x=[-2, 3]` and `y=[1, -1]`, the expected
+result is `[0, 2]`. Automated tests check serialization, defaults, and connections;
+they do not yet run the graph in the editor.
 
 To download libtorch headers, run:
 

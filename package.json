@@ -9,6 +9,7 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/cli.js",
     "gen": "npm run build && node dist/cli.js",
+    "graph": "npm run build && node dist/graphCli.js",
     "copy": "rm -rf C:/Gitlab/gf-extensions/_build/x64/Release/bin/GF.Extensions.PyTorch & cp -R C:/GitHub/tora/extensions/_build/x64/Debug/bin/GF.Extensions.PyTorch C:/Gitlab/gf-extensions/_build/x64/Release/bin/GF.Extensions.PyTorch"
   },
   "dependencies": {
