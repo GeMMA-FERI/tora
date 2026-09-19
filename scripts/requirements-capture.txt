@@ -1,0 +1,2 @@
+# Match the installed libtorch release. Tests use the CPU wheel index.
+torch==2.12.1

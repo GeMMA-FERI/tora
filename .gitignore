@@ -2,4 +2,5 @@ node_modules
 build
 _build
 dist
+__pycache__/
 extensions/GF.Extensions.PyTorch/generated

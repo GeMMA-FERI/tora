@@ -90,6 +90,18 @@ test('document validation catches malformed programs and stale registries', () =
   assert.throws(() => exportNodeGraph(program, r), /regenerate/);
 });
 
+test('capture constraints survive export and invalid dimensions are rejected', () => {
+  const p = structuredClone(program);
+  p.capture = { framework: 'pytorch', version: '2.12.1+cpu', inputs: p.inputs.map(input => ({
+    value: input.id, shape: [2], stride: [1], dtype: 'torch.float32', device: 'cpu', requiresGrad: false,
+  })) };
+  const graph = exportNodeGraph(parseProgramDocument(p), registry);
+  assert.deepEqual(graph.Tora.capture, p.capture);
+  p.capture.inputs[0].shape[0] = -1;
+  assert.throws(() => parseProgramDocument(p), /nonnegative integer/);
+  assert.equal(graph.Tora.capture.inputs[0].shape[0], 2);
+});
+
 test('CLI exports JSON and preserves existing output on binding failure', async t => {
   const dir = await mkdtemp(path.join(tmpdir(), 'tora-graph-'));
   t.after(() => rm(dir, { recursive: true, force: true }));

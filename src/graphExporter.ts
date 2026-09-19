@@ -15,6 +15,7 @@ export interface NodeGraph {
   Nodes: Record<string, GraphNode>;
   Edges: Record<string, { U: string; V: string; UT: string; VT: string }>;
   NodeBases: Record<string, EditorNodeBase>;
+  Tora?: { capture: NonNullable<Program["capture"]> };
 }
 
 export function exportNodeGraph(program: Program, registry: NodeRegistry): NodeGraph {
@@ -23,6 +24,9 @@ export function exportNodeGraph(program: Program, registry: NodeRegistry): NodeG
   }
   const bound = bindProgram(program, registry);
   const graph: NodeGraph = { Nodes: {}, Edges: {}, NodeBases: {} };
+  // Advisory provenance only: the editor currently does not enforce these
+  // capture assumptions and may omit this field when it exports the graph.
+  if (program.capture) graph.Tora = { capture: structuredClone(program.capture) };
   const nodeIds = new Map<string, string>();
   const depths = new Map<string, number>();
   const rows = new Map<number, number>();

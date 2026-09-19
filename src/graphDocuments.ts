@@ -34,7 +34,7 @@ function argument(value: unknown, path: string) {
 
 export function parseProgramDocument(value: unknown): Program {
   const root = object(value, "program");
-  keys(root, ["version", "inputs", "operations", "outputs"], "program");
+  keys(root, ["version", "inputs", "operations", "outputs", "capture"], "program");
   if (root.version !== 1) throw new Error("program.version: expected 1");
   for (const [i, entry] of array(root.inputs, "program.inputs").entries()) {
     const path = `program.inputs[${i}]`;
@@ -60,6 +60,29 @@ export function parseProgramDocument(value: unknown): Program {
     keys(output, ["name", "value"], path);
     string(output.name, `${path}.name`);
     string(output.value, `${path}.value`);
+  }
+  if (root.capture !== undefined) {
+    const capture = object(root.capture, "program.capture");
+    keys(capture, ["framework", "version", "inputs"], "program.capture");
+    if (capture.framework !== "pytorch") throw new Error("program.capture: expected pytorch framework");
+    string(capture.version, "program.capture.version");
+    const inputs = array(capture.inputs, "program.capture.inputs");
+    if (inputs.length !== (root.inputs as unknown[]).length) throw new Error("program.capture: input count mismatch");
+    for (const [i, item] of inputs.entries()) {
+      const path = `program.capture.inputs[${i}]`;
+      const input = object(item, path);
+      keys(input, ["value", "shape", "stride", "dtype", "device", "requiresGrad"], path);
+      if (input.value !== (root.inputs as JsonObject[])[i].id || (root.inputs as JsonObject[])[i].type !== "Tensor") throw new Error(`${path}: input identity mismatch`);
+      for (const key of ["shape", "stride"]) {
+        for (const dimension of array(input[key], `${path}.${key}`)) {
+          if (!Number.isSafeInteger(dimension) || (dimension as number) < 0) throw new Error(`${path}.${key}: expected nonnegative integer dimensions`);
+        }
+      }
+      if ((input.shape as unknown[]).length !== (input.stride as unknown[]).length) throw new Error(`${path}: shape/stride rank mismatch`);
+      string(input.dtype, `${path}.dtype`);
+      string(input.device, `${path}.device`);
+      boolean(input.requiresGrad, `${path}.requiresGrad`);
+    }
   }
   return value as Program;
 }

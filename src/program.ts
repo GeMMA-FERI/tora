@@ -20,4 +20,9 @@ export interface Program {
   inputs: { id: string; type: ValueType }[];
   operations: Operation[];
   outputs: { name: string; value: string }[];
+  capture?: {
+    framework: "pytorch";
+    version: string;
+    inputs: { value: string; shape: number[]; stride: number[]; dtype: string; device: string; requiresGrad: boolean }[];
+  };
 }

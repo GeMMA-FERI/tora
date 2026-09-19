@@ -89,7 +89,8 @@ and symbolic constraints are not supported in this first binding pass.
 
 The binder result is an intermediate plan. `exportNodeGraph()` in
 `src/graphExporter.ts` lowers that plan to the editor's `Nodes`, `Edges`, and
-`NodeBases` format. Python capture is not implemented yet.
+`NodeBases` format. The Python adapter below supplies this representation from a
+captured module.
 
 ## Exporting a NodeGraph
 
@@ -126,6 +127,65 @@ not embed test tensors or model weights. Supply `x` and `y` through the graph's
 input mechanism to execute it. With `x=[-2, 3]` and `y=[1, -1]`, the expected
 result is `[0, 2]`. Automated tests check serialization, defaults, and connections;
 they do not yet run the graph in the editor.
+
+## Capturing a Python module
+
+`scripts/capture_program.py` uses `torch.export.export(..., strict=True)` to
+capture a module with example inputs, then translates its ATen graph to the
+program format. It follows PyTorch's
+[export graph representation](https://docs.pytorch.org/docs/stable/user_guide/torch_compiler/export/api_reference.html).
+This is a capture frontend for a supported subset, not a general Python parser.
+
+The adapter is tested with Python 3.14 and PyTorch 2.12.1+cpu, matching the release
+of the local libtorch 2.12.1+cu126 installation. For a project-local CPU environment:
+
+```powershell
+python -m venv _build/capture-venv
+_build/capture-venv/Scripts/python.exe -m pip install -r scripts/requirements-capture.txt --index-url https://download.pytorch.org/whl/cpu
+```
+
+A factory supplies the module and its example tensors. It returns `(module,
+args)` or `(module, args, kwargs)`, where `args` is a tuple. For example,
+`examples/add_relu.py:example` returns an evaluation-mode module and two tensors.
+The adapter uses the mode supplied by the factory; it does not switch modes.
+
+```powershell
+_build/capture-venv/Scripts/python.exe scripts/capture_program.py --factory examples/add_relu.py:example --out _build/add-relu.captured.program.json
+npm run graph -- --program _build/add-relu.captured.program.json --registry _build/graph-example-extension/registry.json --out _build/add-relu.from-python.nodegraph.json
+```
+
+Use the registry-generation command above first. `--factory` executes the selected
+Python factory and captures the returned module. Input IDs come from graph
+placeholders; outputs are flattened in export order and named `output_0`,
+`output_1`, etc. Original nested Python return structures are not reconstructed.
+Tuple selection maps to the producer's return position rather than an editor
+selection node. The graph compiler still decides whether each exact ATen overload
+has an available extension binding.
+
+The initial adapter accepts flat, static, strided tensor inputs and ATen
+operations producing tensors or tuples of tensors. It rejects lifted parameters,
+buffers, tensor constants, input mutation, symbolic dimensions, list arguments,
+and control-flow operators. Primitive user inputs are rejected because export
+can specialize them to the example values. Literal operator arguments remain
+supported by the program format. Static Python branches may be specialized and
+loops may be unrolled during capture; their original structure is not retained.
+
+Capture records PyTorch version and input shapes, strides, dtypes, devices, and
+gradient flags in `program.capture`. The exporter copies this to an advisory
+`Tora.capture` field. Supply inputs consistent with the capture assumptions:
+the editor does not enforce this metadata and may drop it when re-exporting.
+This metadata is not a complete serialization of PyTorch export guards.
+Tensor contents and model weights are not embedded in the generated graph.
+
+Run the capture and full Python-to-JSON tests after building TypeScript:
+
+```powershell
+npm run build
+_build/capture-venv/Scripts/python.exe -m unittest discover -s tests/python -v
+```
+
+These tests replay the captured operations in PyTorch and compare them with the
+original module. They also exercise both CLIs, but do not execute GemmaFusionSuite.
 
 To download libtorch headers, run:
 
