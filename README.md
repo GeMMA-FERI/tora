@@ -36,6 +36,44 @@ The registry describes generated bindings; inclusion does not certify runtime
 support. It does not yet contain the editor's numeric type IDs or built-in nodes.
 Keep it with the extension generated from the same schema and configuration.
 
+## Graph compiler in progress
+
+`src/program.ts` defines a versioned, straight-line program with typed inputs,
+exact ATen operator names, positional/keyword arguments, and explicit result
+value IDs. Operations appear in dependency order. An argument is either
+`{ "value": "id" }` or `{ "literal": 1 }`; strings are literals only when wrapped
+in `literal`. `examples/add-relu.program.json` represents `relu(x + y)`.
+
+`bindProgram(program, registry)` from `src/binder.ts` resolves this representation
+to implementation IDs and terminal keys. It binds keyword arguments, supplies
+supported schema defaults, checks value references and types, and records each
+result's producing operation and port. Diagnostics include the operation ID,
+operator, and optional `source` location.
+
+After `npm run build`, the library can be used from JavaScript:
+
+```js
+import { readFile } from 'node:fs/promises';
+import { bindProgram } from './dist/binder.js';
+
+const program = JSON.parse(await readFile('examples/add-relu.program.json', 'utf8'));
+const registry = JSON.parse(await readFile('extensions/GF.Extensions.PyTorch/generated/registry.json', 'utf8'));
+const bound = bindProgram(program, registry);
+```
+
+This API currently expects documents matching the TypeScript interfaces; it is
+not an untrusted JSON parser. It supports Tensor, Scalar, Int, Float, Bool, and
+Str values, with finite numeric, boolean, string, and optional null literals.
+References require matching types. Numeric, `True`/`False`, `None`, and JSON-quoted
+string defaults are supported; other expressions are rejected without evaluation.
+An optional null literal represents an absent input value for future lowering.
+Lists, mutation, optional outputs, conversions, tensor resources, control flow,
+and symbolic constraints are not supported in this first binding pass.
+
+The result is an intermediate binding plan, not an importable NodeGraph file.
+Python capture, editor type metadata, built-in nodes, and graph serialization are
+the next layers. The generator's existing CLI remains unchanged.
+
 To download libtorch headers, run:
 
 ```bash

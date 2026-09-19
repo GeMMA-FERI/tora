@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "inputs": [{ "id": "x", "type": "Tensor" }, { "id": "y", "type": "Tensor" }],
+  "operations": [
+    {
+      "id": "add",
+      "operator": "aten.add.Tensor",
+      "args": [{ "value": "x" }, { "value": "y" }],
+      "outputs": ["sum"]
+    },
+    {
+      "id": "relu",
+      "operator": "aten.relu.default",
+      "args": [{ "value": "sum" }],
+      "outputs": ["result"]
+    }
+  ],
+  "outputs": [{ "name": "result", "value": "result" }]
+}
