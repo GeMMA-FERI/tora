@@ -82,6 +82,10 @@ test('generation emits namespace metadata without the old 250-node cap', async t
   const nodes = await readdir(path.join(outDir, 'nodes'));
   assert.equal(nodes.length, ops.length);
   assert.equal(new Set(nodes.map(name => name.toLowerCase())).size, ops.length);
+  const registry = JSON.parse(await readFile(path.join(outDir, 'registry.json'), 'utf8'));
+  assert.equal(registry.version, 1);
+  assert.equal(registry.operations.length, ops.length);
+  assert.deepEqual(registry.operations.map(op => `${op.className}.hpp`).sort(), nodes.sort());
   const node = await readFile(path.join(outDir, 'nodes', nodes[0]), 'utf8');
   assert.match(node, /static ::Data::Properties create_metadata\(\)/);
   assert.match(node, /AddNamespace<"PyTorch::Tests">\(metadata\);/);

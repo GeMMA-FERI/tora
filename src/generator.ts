@@ -5,6 +5,7 @@ import { parseFuncSchema } from "./schemaParser.js";
 import { filterSubset } from "./subset.js";
 import { makeNodeClassName } from "./naming.js";
 import { renderNodeDefinition } from "./renderer.js";
+import { buildNodeRegistry } from "./registry.js";
 import type { GeneratorConfig, TorchFunction } from "./types.js";
 
 interface RawNativeFunction {
@@ -123,4 +124,6 @@ export async function runGenerator(config: GeneratorConfig): Promise<void> {
   ].join("\n");
 
   await writeFile(path.join(config.outDir, "manifest.txt"), manifest, "utf-8");
+  await writeFile(path.join(config.outDir, "registry.json"),
+    JSON.stringify(buildNodeRegistry(filtered), null, 2) + "\n", "utf-8");
 }

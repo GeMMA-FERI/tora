@@ -26,6 +26,16 @@ npm run gen
 
 Default output: `extensions/GF.Extensions.PyTorch/generated/nodes/*.hpp` + `extensions/GF.Extensions.PyTorch/generated/manifest.txt`
 
+Generation also writes `registry.json`, a versioned catalog for the graph compiler.
+It contains only the operations selected for that generation, with exact ATen
+overloads, implementation UUIDs, argument/return mappings to current terminal
+keys, schema types, and C++ property types. Terminal keys include the existing
+optional/list/keyword-only suffixes and are shared with C++ generation.
+Defaults are recorded as `defaultExpression` schema text, not evaluated values.
+The registry describes generated bindings; inclusion does not certify runtime
+support. It does not yet contain the editor's numeric type IDs or built-in nodes.
+Keep it with the extension generated from the same schema and configuration.
+
 To download libtorch headers, run:
 
 ```bash

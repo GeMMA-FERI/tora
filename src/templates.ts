@@ -24,22 +24,28 @@ function withLabel(template: string, label: string): string {
   return template.replaceAll("{label}", label);
 }
 
-export function renderInputAliasType(arg: TorchArgument): string {
-  const base = INPUT_TYPE_TEMPLATES[arg.kind];
+export function inputPortKey(arg: TorchArgument): string {
   const labels: string[] = [];
   if (arg.optional) labels.push("optional");
   if (arg.list) labels.push("list");
   if (arg.kwOnly) labels.push("kw_only");
   const suffix = labels.length ? ` (${labels.join(",")})` : "";
-  return withLabel(base, `${makePortLabel(arg.name, "input")}${suffix}`);
+  return `${makePortLabel(arg.name, "input")}${suffix}`;
 }
 
-export function renderReturnAliasType(ret: TorchReturn, index: number): string {
-  const base = INPUT_TYPE_TEMPLATES[ret.kind];
+export function outputPortKey(ret: TorchReturn, index: number): string {
   const name = ret.name ?? `output_${index}`;
   const labels: string[] = [];
   if (ret.optional) labels.push("optional");
   if (ret.list) labels.push("list");
   const suffix = labels.length ? ` (${labels.join(",")})` : "";
-  return withLabel(base, `${makePortLabel(name, "output")}${suffix}`);
+  return `${makePortLabel(name, "output")}${suffix}`;
+}
+
+export function renderInputAliasType(arg: TorchArgument): string {
+  return withLabel(INPUT_TYPE_TEMPLATES[arg.kind], inputPortKey(arg));
+}
+
+export function renderReturnAliasType(ret: TorchReturn, index: number): string {
+  return withLabel(INPUT_TYPE_TEMPLATES[ret.kind], outputPortKey(ret, index));
 }
