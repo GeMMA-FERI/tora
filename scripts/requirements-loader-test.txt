@@ -1,0 +1,3 @@
+-r requirements-capture.txt
+safetensors==0.8.0
+numpy==2.5.3

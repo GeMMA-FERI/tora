@@ -38,6 +38,12 @@
     <ClInclude Include="ExtensionHostImpl.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="SafeTensorLoader.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="LoadTensorProcessor.hpp">
+      <Filter>Header Files\Processors</Filter>
+    </ClInclude>
     <ClInclude Include="generated\nodes\*.hpp">
       <Filter>Header Files\Processors</Filter>
     </ClInclude>

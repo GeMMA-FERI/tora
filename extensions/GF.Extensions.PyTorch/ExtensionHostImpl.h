@@ -3,6 +3,7 @@
 #include "generated/GeneratedProcessorsManifest.hpp"
 #include "TensorDiagnosticProcessors.hpp"
 #include "TensorFromTypedArrayProcessor.hpp"
+#include "LoadTensorProcessor.hpp"
 
 namespace ExtensionHost::impl {
 
@@ -12,6 +13,7 @@ namespace ExtensionHost::impl {
 			Add<TensorFromTextProcessor>();
 			Add<TensorToTextProcessor>();
 			Add<TensorFromTypedArrayProcessor>();
+			Add<LoadTensorProcessor>();
 			GFExtensionsPyTorchGenerated::ForEachProcessor([this]<typename TProcessor>() {
 				this->template Add<TProcessor>();
 			});
