@@ -56,3 +56,33 @@ VS2026, `VCPKG_ROOT`, the project-local capture environment, and `LibTorchDir`
 paths, relative-path resolution, missing tensors, unsupported dtypes and malformed
 archives. These exercise the native loader; editor UI execution is a separate
 manual check. Python capture does not yet emit weight resources or loader nodes.
+
+## Conv2d examples with local tensor sources
+
+From the repository root, with the current generated registry containing Conv2d:
+
+```powershell
+npm run build
+_build/capture-venv/Scripts/python.exe examples/save_conv2d_tensors.py
+node examples/conv2d-graphs.mjs
+```
+
+This writes three ready-to-import graphs without replacing `_build/conv2d.nodegraph.json`:
+
+- `_build/conv2d-text.nodegraph.json`: input, weight and bias from Tensor From Text.
+- `_build/conv2d-mixed.nodegraph.json`: input from text; weight and bias from Load Tensor.
+- `_build/conv2d-safetensors.nodegraph.json`: all three tensors from Load Tensor.
+
+Each graph includes Tensor To Text and Generic Outputs with `Result` (tensor)
+and `Text` (string). All tensors are Float64 to match Tensor From Text. The input
+has shape `[1, 1, 3, 3]` with values 1 through 9, the weight has shape `[1, 1, 2, 2]`
+with kernel `[[1, 0], [0, -1]]`, and the bias is `[0.5]`. Stride and dilation are
+`[1, 1]`, padding is `[0, 0]`, and groups is 1. The expected result has shape
+`[1, 1, 2, 2]`, with every value equal to `-3.5`.
+
+The archive is `_build/conv2d-tensors.safetensors`. Loader nodes refer to it by
+filename and an absolute Base Directory set during generation. Update Base
+Directory if moving the files to another location. Use an extension build with
+the enabled Conv2d scalar ports and Load Tensor. Generation validates edge keys;
+Python verifies the archive values against the reference convolution. Execution
+of these particular graphs in the editor remains a manual check.
