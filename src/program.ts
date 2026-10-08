@@ -2,9 +2,10 @@
 // to the program; they are neither editor instance UUIDs nor terminal keys.
 export type ValueType = "Tensor" | "Scalar" | "Int" | "Float" | "Bool" | "Str";
 
-export type Argument =
+export type ScalarArgument =
   | { value: string }
   | { literal: number | boolean | string | null };
+export type Argument = ScalarArgument | { items: ScalarArgument[] };
 
 export interface Operation {
   id: string;

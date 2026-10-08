@@ -3786,16 +3786,30 @@ operations:
       calls."
   conv1d:
     namespace: PyTorch::Convolution
-    enabled: false
-    reason: List-valued ports are not implemented by the current property mappings.
+    displayName: Conv1d
+    description: Apply a one-dimensional convolution to an input tensor using the supplied weights and optional bias.
+    arguments:
+      stride:
+        ports: [{name: Stride}]
+      padding:
+        ports: [{name: Padding}]
+      dilation:
+        ports: [{name: Dilation}]
   conv1d.padding:
     namespace: PyTorch::Convolution
     enabled: false
     reason: List-valued ports are not implemented by the current property mappings.
   conv2d:
     namespace: PyTorch::Convolution
-    enabled: false
-    reason: List-valued ports are not implemented by the current property mappings.
+    displayName: Conv2d
+    description: Apply a two-dimensional convolution with separate height and width settings using the supplied weights and optional bias.
+    arguments:
+      stride:
+        ports: [{name: Stride Height}, {name: Stride Width}]
+      padding:
+        ports: [{name: Padding Height}, {name: Padding Width}]
+      dilation:
+        ports: [{name: Dilation Height}, {name: Dilation Width}]
   conv2d.padding:
     namespace: PyTorch::Convolution
     enabled: false

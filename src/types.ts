@@ -22,6 +22,7 @@ export interface TorchArgument {
   kind: ArgKind;
   optional: boolean;
   list: boolean;
+  listLength?: number;
   kwOnly: boolean;
   defaultValue?: string;
 }
@@ -35,6 +36,7 @@ export interface TorchReturn {
 }
 
 export interface TorchFunction {
+  arguments?: Record<string, { ports: { name: string }[] }>;
   namespace?: string;
   displayName?: string;
   description?: string;

@@ -30,7 +30,9 @@ Generation also writes `registry.json`, a versioned catalog for the graph compil
 It contains only the operations selected for that generation, with exact ATen
 overloads, implementation UUIDs, argument/return mappings to current terminal
 keys, schema types, and C++ property types. Terminal keys include the existing
-optional/list/keyword-only suffixes and are shared with C++ generation.
+optional/list/keyword-only suffixes for ordinary ports and are shared with C++ generation.
+Registry version 2 adds ordered `split` mappings for arguments exposed as multiple
+scalar ports. The compiler also accepts version 1 registries without split mappings.
 Defaults are recorded as `defaultExpression` schema text, not evaluated values.
 The registry describes generated bindings; inclusion does not certify runtime
 support. Each port includes `editorType` with the editor's numeric `ValueType`,
@@ -84,7 +86,10 @@ Str values, with finite numeric, boolean, string, and optional null literals.
 References require matching types. Numeric, `True`/`False`, `None`, and JSON-quoted
 string defaults are supported; other expressions are rejected without evaluation.
 An optional null literal represents an absent input value for future lowering.
-Lists, mutation, optional outputs, conversions, tensor resources, control flow,
+Fixed integer sequences use `{ "items": [{ "literal": 2 }, { "literal": 1 }] }`.
+Elements may also reference integer values using `{ "value": "id" }`. They bind
+only to configured fixed-size scalar ports; nested or variable-length lists,
+mutation, optional outputs, conversions, tensor resources, control flow,
 and symbolic constraints are not supported in this first binding pass.
 
 The binder result is an intermediate plan. `exportNodeGraph()` in
@@ -164,7 +169,7 @@ has an available extension binding.
 
 The initial adapter accepts flat, static, strided tensor inputs and ATen
 operations producing tensors or tuples of tensors. It rejects lifted parameters,
-buffers, tensor constants, input mutation, symbolic dimensions, list arguments,
+buffers, tensor constants, input mutation, symbolic dimensions, non-integer sequences,
 and control-flow operators. Primitive user inputs are rejected because export
 can specialize them to the example values. Literal operator arguments remain
 supported by the program format. Static Python branches may be specialized and
@@ -261,7 +266,7 @@ Namespaces use identifier segments separated by `::`, with no spaces (use
 to inherit defaults. The optional `defaults.namespace` falls back to
 `PyTorch::Uncategorized`. Operation namespaces override that default.
 
-Supported operation fields are `namespace`, `displayName`, `description`, `enabled` (a boolean,
+Supported operation fields are `namespace`, `displayName`, `description`, `arguments`, `enabled` (a boolean,
 defaulting to true), and `reason` (a non-empty explanatory string, not emitted
 into C++). `displayName` overrides the node's visible name without changing its
 implementation ID. `description` supplies the node's user-facing help text;
@@ -292,6 +297,65 @@ C++ type mappings or installed libtorch version. Use a matching `--source`, edit
 the allowlist, or use `--include`/`--max` to select the operations you need.
 
 Run `npm test` to check allowlist parsing and namespace generation.
+
+## Fixed integer arguments as scalar ports
+
+The numeric-padding `conv1d` and `conv2d` overloads are enabled. Conv1d exposes
+`Stride`, `Padding`, and `Dilation` as Int64 ports. Conv2d exposes Height and Width
+ports for each setting, in that order. Both also expose `Groups` and optional
+`Bias (optional)`. Their defaults are stride/dilation/groups = 1 and padding = 0.
+
+The YAML specifies the mapping, rather than the renderer recognizing particular
+operation names:
+
+```yaml
+conv2d:
+  namespace: PyTorch::Convolution
+  arguments:
+    stride:
+      ports: [{name: Stride Height}, {name: Stride Width}]
+    padding:
+      ports: [{name: Padding Height}, {name: Padding Width}]
+    dilation:
+      ports: [{name: Dilation Height}, {name: Dilation Width}]
+```
+
+Each mapping must target a non-optional `int[N]` or `SymInt[N]` argument with
+exactly N named ports. Names become terminal keys, so keep them stable after
+graphs are saved. Unknown arguments, duplicate keys and incorrect lengths are
+rejected. Unmapped arguments retain their existing names, types and suffixes.
+For configured operations, concrete integer schema defaults are also registered
+on the generated node inputs so manually created nodes start with usable values.
+
+The registry records each scalar port's source argument, index and length.
+The C++ processor builds an owned `std::array<int64_t, N>` for the libtorch call.
+The compiler expands a scalar across all N ports, or assigns an explicit sequence
+of exactly N elements in order. A scalar integer connection can also feed all N
+ports, while an `items` sequence can connect its elements individually. For
+example, `stride=2` gives `(2, 2)`, while `stride=(2, 1)` gives `(2, 1)`.
+Sequences with the wrong length are rejected; an entire dynamic list cannot be
+connected until array unpacking is supported.
+
+This supports concrete integers, not symbolic shape expressions. String padding
+overloads (`same`/`valid`), generic `convolution`, and variable-length list ports
+remain disabled. Python capture can retain concrete integer lists/tuples, but the
+compiler still requires the target operation to have a supported binding.
+
+Generate a sample with weights supplied as graph inputs:
+
+```powershell
+npm run gen -- --source _build/native_functions.yaml
+_build/capture-venv/Scripts/python.exe scripts/capture_program.py --factory examples/conv2d.py:example --out _build/conv2d.program.json
+npm run graph -- --program _build/conv2d.program.json --registry extensions/GF.Extensions.PyTorch/generated/registry.json --out _build/conv2d.nodegraph.json
+```
+
+Rebuild/reload the extension to use the new processors. The native integration
+test `scripts/test-convolution.cmd` generates the two processors into a separate
+test directory, checks their registered defaults, and compares outputs with
+libtorch for grouped Conv1d and Conv2d with unequal axis settings and optional
+bias. It uses the same VS2026, SDK, libtorch and VCPKG environment as the loader
+tests, plus `_build/native_functions.yaml`. The example graph itself still needs
+an editor import/execution check.
 
 ## Reviewing operations with Codex
 
@@ -325,11 +389,12 @@ Decisions use compact groups of family IDs from the current batch:
 Every batch ID must occur exactly once. A group `reason` disables that family;
 otherwise per-overload schema checks determine eligibility. These checks exclude
 internal and backward operators, in-place/output-buffer mutations, method-only
-schemas, no-return operations, list-valued ports, optional returns, and argument
+schemas, no-return operations, unmapped list-valued ports, optional returns, and argument
 types without a corresponding bridge conversion. This is a conservative
 forward-processing palette, not a claim that those PyTorch operations are bad.
-Even ordinary convolution and pooling nodes may be disabled until list-valued
-ports are implemented. Remaining enabled nodes are candidates, not proof of
+Configured Conv1d/Conv2d scalar mappings are retained during review; other
+convolution and pooling variants may remain disabled until their argument types
+are supported. Remaining enabled nodes are candidates, not proof of
 C++ compilation or runtime compatibility.
 
 Checkpoints and decisions live in `_build/operation-review` (override with

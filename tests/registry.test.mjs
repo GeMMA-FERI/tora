@@ -8,7 +8,7 @@ import { uuidToCppCtor } from '../dist/naming.js';
 test('registry binds overloads, defaults, and exact generated terminal keys', () => {
   const fn = parseFuncSchema('add.Tensor(Tensor self, Tensor other, *, Scalar alpha=1) -> Tensor', [], []);
   const registry = buildNodeRegistry([fn]);
-  assert.equal(registry.version, 1);
+  assert.equal(registry.version, 2);
   const op = registry.operations[0];
   assert.equal(op.operator, 'aten.add.Tensor');
   assert.deepEqual(op.inputs.map(p => [p.argument, p.key]), [

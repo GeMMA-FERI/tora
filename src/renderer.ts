@@ -1,10 +1,7 @@
 import { makeDisplayName, makeNodeClassName, signatureUuid, uuidToCppCtor } from "./naming.js";
-import { renderInputAliasType, renderReturnAliasType } from "./templates.js";
+import { renderReturnAliasType } from "./templates.js";
 import type { TorchFunction } from "./types.js";
-
-function safeAliasName(input: string): string {
-  return input.replace(/[^a-zA-Z0-9]+/g, "_").replace(/^([0-9])/, "_$1");
-}
+import { resolveInputPorts, safeAliasName, integerDefault } from "./inputPorts.js";
 
 export function renderNodeDefinition(fn: TorchFunction): string {
   const className = makeNodeClassName(fn);
@@ -14,20 +11,23 @@ export function renderNodeDefinition(fn: TorchFunction): string {
     : fn.baseName;
   const uuid = signatureUuid(fn.schemaSignature);
 
-  const inputAliases = fn.args
-    .map((arg) => `    using In_${safeAliasName(arg.name)} = ${renderInputAliasType(arg)};`)
+  const ports = resolveInputPorts(fn);
+  const inputAliases = ports
+    .map(port => `    using In_${port.alias} = ${port.cppType};`)
     .join("\n");
 
   const outputAliases = fn.returns
     .map((ret, i) => `    using Out_${safeAliasName(ret.name ?? `output_${i}`)} = ${renderReturnAliasType(ret, i)};`)
     .join("\n");
 
-  const registerInputs = fn.args
-    .map((arg) =>
-      arg.optional
-        ? `        RegisterOptionalInput<In_${safeAliasName(arg.name)}>();`
-        : `        RegisterInput<In_${safeAliasName(arg.name)}>();`
-    )
+  const registerInputs = ports
+    .map(port => {
+      if (port.argument.optional) return `        RegisterOptionalInput<In_${port.alias}>();`;
+      const value = fn.arguments && ["Int", "SymInt"].includes(port.argument.kind)
+        ? integerDefault(port.argument, port.split?.index) : undefined;
+      const expression = value === undefined ? "" : `::Data::Variant(static_cast<Core::Int64>(${value}))`;
+      return `        RegisterInput<In_${port.alias}>(${expression});`;
+    })
     .join("\n");
 
   const registerOutputs = fn.returns
@@ -37,6 +37,8 @@ export function renderNodeDefinition(fn: TorchFunction): string {
   const fetchInputs = fn.args
     .map((arg) => {
       const n = safeAliasName(arg.name);
+      const split = ports.filter(port => port.argument === arg && port.split);
+      if (split.length) return `        const std::array<int64_t, ${split.length}> torch_${n}{ ${split.map(port => `static_cast<int64_t>(inputs.Get<In_${port.alias}>())`).join(", ")} };`;
       if (arg.optional) {
         return [
           `        std::optional<decltype(PyTorch::ToTorchValue(inputs.Get<In_${n}>()))> torch_${n};`,
@@ -61,7 +63,7 @@ export function renderNodeDefinition(fn: TorchFunction): string {
           })
           .join("\n");
 
-  return `struct ${className} : GF::Extensions::impl::DataProcessorBridgeImpl<${className}> {
+  return `${ports.some(port => port.split) ? "#include <array>\n\n" : ""}struct ${className} : GF::Extensions::impl::DataProcessorBridgeImpl<${className}> {
     static constexpr auto name() { return std::string_view(${JSON.stringify(displayName)}); }
     static constexpr auto description() { return std::string_view(${JSON.stringify(fn.description ?? `Auto-generated from PyTorch signature: ${fn.rawFunc}`)}); }
     static constexpr auto interface_id() { return Core::interfaces::interface_id_storage<GF::Interfaces::Ext::IDataProcessor>::value; }

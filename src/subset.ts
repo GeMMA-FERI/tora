@@ -1,12 +1,14 @@
 import { readFile } from "node:fs/promises";
 import YAML from "yaml";
 import type { SubsetConfig, TorchFunction } from "./types.js";
+import { resolveInputPorts } from "./inputPorts.js";
 
 function opIdentifier(fn: TorchFunction): string {
   return fn.overloadName ? `${fn.baseName}.${fn.overloadName}` : fn.baseName;
 }
 
 interface OperationOptions {
+  arguments?: TorchFunction["arguments"];
   namespace: string;
   displayName?: string;
   description?: string;
@@ -55,7 +57,7 @@ async function loadAllowlist(allowlistPath: string): Promise<Map<string, Operati
       throw new Error(`${location}: invalid operation identifier`);
     }
     const options = mapping(value, location);
-    fields(options, ["namespace", "enabled", "reason", "displayName", "description"], location);
+    fields(options, ["namespace", "enabled", "reason", "displayName", "description", "arguments"], location);
     const namespace = namespaceValue(options.namespace === undefined ? defaultNamespace : options.namespace, `${location}.namespace`);
     if (options.enabled !== undefined && typeof options.enabled !== "boolean") {
       throw new Error(`${location}.enabled: expected a boolean`);
@@ -65,8 +67,25 @@ async function loadAllowlist(allowlistPath: string): Promise<Map<string, Operati
         throw new Error(`${location}.${key}: expected a non-empty string`);
       }
     }
+    let argumentMappings: TorchFunction["arguments"];
+    if (options.arguments !== undefined) {
+      const args = mapping(options.arguments, `${location}.arguments`);
+      argumentMappings = Object.fromEntries(Object.entries(args).map(([name, value]) => {
+        const path = `${location}.arguments.${name}`;
+        const item = mapping(value, path);
+        fields(item, ["ports"], path);
+        if (!Array.isArray(item.ports) || !item.ports.length) throw new Error(`${path}.ports: expected a non-empty array`);
+        const ports = item.ports.map((port, index) => {
+          const p = mapping(port, `${path}.ports[${index}]`);
+          fields(p, ["name"], `${path}.ports[${index}]`);
+          if (typeof p.name !== "string" || !p.name.trim() || /[\x00-\x1f]/.test(p.name)) throw new Error(`${path}: expected a non-empty port name without control characters`);
+          return { name: p.name };
+        });
+        return [name, { ports }];
+      }));
+    }
     if (options.enabled === false) continue;
-    entries.set(op, { namespace, displayName: options.displayName as string | undefined, description: options.description as string | undefined });
+    entries.set(op, { namespace, arguments: argumentMappings, displayName: options.displayName as string | undefined, description: options.description as string | undefined });
   }
   return entries;
 }
@@ -85,7 +104,10 @@ export async function filterSubset(
     const options = allowlist.get(opId);
     if (options === undefined) continue;
     if (includeNameRegex && !includeNameRegex.test(opId)) continue;
-    out.push({ ...fn, ...options });
+    const configured = { ...fn, ...options };
+    try { resolveInputPorts(configured); }
+    catch (error) { throw new Error(`${allowlistPath}:operations.${opId}: ${error instanceof Error ? error.message : error}`); }
+    out.push(configured);
     if (out.length >= subset.maxOps) break;
   }
 

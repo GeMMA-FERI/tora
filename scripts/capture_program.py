@@ -45,13 +45,17 @@ def capture_program(module, args, kwargs=None):
             if not isinstance(result, str):
                 fail(node, "Expected one tensor value; select a tuple result explicitly")
             return {"value": result}
+        if isinstance(value, (tuple, list)):
+            if not all(type(item) is int for item in value):
+                fail(node, "Only concrete integer sequences are supported")
+            return {"items": [argument(item, node) for item in value]}
         if value is None or type(value) in (str, bool):
             return {"literal": value}
         if type(value) in (int, float):
             if not math.isfinite(value) or (float(value).is_integer() and abs(value) > 2**53 - 1):
                 fail(node, "Numeric literal cannot be represented safely in JSON")
             return {"literal": value}
-        fail(node, f"Unsupported argument type {type(value).__name__}; lists, dtype/device objects and symbolic values need lowering")
+        fail(node, f"Unsupported argument type {type(value).__name__}; dtype/device objects and symbolic values need lowering")
 
     for node in exported.graph.nodes:
         if node.op == "placeholder":

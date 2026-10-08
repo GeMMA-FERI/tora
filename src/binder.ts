@@ -30,10 +30,11 @@ function fail(operation: Operation, message: string): never {
 }
 
 function portType(port: Port, operation: Operation): ValueType {
-  if (port.list || !supportedTypes.has(port.kind) || port.type.includes("!")) {
+  const kind = port.kind === "SymInt" ? "Int" : port.kind;
+  if (port.list || !supportedTypes.has(kind) || port.type.includes("!")) {
     fail(operation, `unsupported port type ${port.type} on ${port.key}`);
   }
-  return port.kind as ValueType;
+  return kind as ValueType;
 }
 
 function defaultArgument(port: InputPort, operation: Operation): Argument {
@@ -41,6 +42,14 @@ function defaultArgument(port: InputPort, operation: Operation): Argument {
   if (expression === undefined) fail(operation, `missing argument ${port.argument}`);
   if (expression === "None") return { literal: null };
   if (expression === "True" || expression === "False") return { literal: expression === "True" };
+  if (port.split && expression.startsWith("[")) {
+    try {
+      const values: unknown = JSON.parse(expression);
+      if (Array.isArray(values) && values.every(value => typeof value === "number" && Number.isSafeInteger(value))) {
+        return { items: values.map(literal => ({ literal })) };
+      }
+    } catch { /* Diagnose unsupported expressions below. */ }
+  }
   if (/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(expression)) {
     return { literal: Number(expression) };
   }
@@ -56,6 +65,7 @@ function defaultArgument(port: InputPort, operation: Operation): Argument {
 function bindArgument(argument: Argument, port: InputPort, operation: Operation,
   values: Map<string, ValueSource>): BoundArgument {
   const expected = portType(port, operation);
+  if ("items" in argument) fail(operation, `sequence supplied to scalar argument ${port.argument}`);
   if ("value" in argument) {
     const source = values.get(argument.value);
     if (!source) fail(operation, `unknown or forward value ${argument.value} for ${port.argument}`);
@@ -81,7 +91,7 @@ function bindArgument(argument: Argument, port: InputPort, operation: Operation,
 }
 
 export function bindProgram(program: Program, registry: NodeRegistry): BoundProgram {
-  if (program.version !== 1 || registry.version !== 1) throw new Error("Unsupported program or registry version");
+  if (program.version !== 1 || ![1, 2].includes(registry.version)) throw new Error("Unsupported program or registry version");
   const bindings = new Map<string, Binding>();
   for (const binding of registry.operations) {
     if (bindings.has(binding.operator)) throw new Error(`Duplicate registry operator ${binding.operator}`);
@@ -107,7 +117,23 @@ export function bindProgram(program: Program, registry: NodeRegistry): BoundProg
       if (new Set(ports.map(port => port.key)).size !== ports.length) fail(operation, "ambiguous terminal keys in registry");
     }
     if (operation.outputs.length !== binding.outputs.length) fail(operation, `expected ${binding.outputs.length} output values`);
-    const positional = binding.inputs.filter(port => !port.keywordOnly);
+    const groups = new Map<string, InputPort[]>();
+    for (const port of binding.inputs) {
+      const group = groups.get(port.argument) ?? [];
+      group.push(port);
+      groups.set(port.argument, group);
+    }
+    for (const [name, ports] of groups) {
+      if (ports.some(port => port.split)) {
+        if (registry.version !== 2 || ports.some((port, index) => !port.split
+          || port.split.index !== index || port.split.length !== ports.length
+          || port.kind !== "Int" || port.list || port.optional
+          || port.keywordOnly !== ports[0].keywordOnly || port.defaultExpression !== ports[0].defaultExpression)) {
+          fail(operation, `invalid split-port mapping for ${name}`);
+        }
+      } else if (ports.length !== 1) fail(operation, `duplicate argument ${name} in registry`);
+    }
+    const positional = [...groups.values()].map(ports => ports[0]).filter(port => !port.keywordOnly);
     if (operation.args.length > positional.length) fail(operation, "too many positional arguments");
     const argumentsByName = new Map<string, Argument>();
     operation.args.forEach((arg, index) => argumentsByName.set(positional[index].argument, arg));
@@ -116,11 +142,22 @@ export function bindProgram(program: Program, registry: NodeRegistry): BoundProg
       if (argumentsByName.has(name)) fail(operation, `argument ${name} supplied twice`);
       argumentsByName.set(name, argument);
     }
-    const inputs = binding.inputs.map(port => ({
-      key: port.key,
-      argument: port.argument,
-      source: bindArgument(argumentsByName.get(port.argument) ?? defaultArgument(port, operation), port, operation, values),
-    }));
+    const inputs = [...groups.values()].flatMap(ports => {
+      const first = ports[0];
+      const argument = argumentsByName.get(first.argument) ?? defaultArgument(first, operation);
+      let elements: Argument[];
+      if (first.split) {
+        if ("items" in argument) {
+          if (argument.items.length !== ports.length) fail(operation, `expected ${ports.length} elements for ${first.argument}, got ${argument.items.length}`);
+          elements = argument.items;
+        } else {
+          // Fixed-size integer schema arguments allow scalar broadcasting.
+          elements = ports.map(() => argument);
+        }
+      } else elements = [argument];
+      return ports.map((port, index) => ({ key: port.key, argument: port.argument,
+        source: bindArgument(elements[index], port, operation, values) }));
+    });
     const outputs = binding.outputs.map((port, index) => {
       const type = portType(port, operation);
       if (port.optional) fail(operation, `optional output ${port.key} is not supported yet`);

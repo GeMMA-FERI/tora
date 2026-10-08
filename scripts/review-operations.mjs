@@ -6,6 +6,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import YAML from 'yaml';
 import { parseFuncSchema } from '../dist/schemaParser.js';
+import { resolveInputPorts } from '../dist/inputPorts.js';
 
 const digest = text => createHash('sha256').update(text).digest('hex');
 const namespacePattern = /^PyTorch(?:::[A-Za-z_][A-Za-z0-9_]*)+$/;
@@ -17,7 +18,8 @@ export function exclusion(fn) {
   if (fn.args.some(arg => arg.rawType.includes('!'))) return 'Writes into supplied tensors; output-buffer variants are excluded from the node palette.';
   if (fn.variants.length && !fn.variants.includes('function')) return 'Method-only schema; the renderer currently emits free at:: function calls.';
   if (!fn.returns.length) return 'No return value; the renderer currently requires a result.';
-  if ([...fn.args, ...fn.returns].some(value => value.list)) return 'List-valued ports are not implemented by the current property mappings.';
+  if (fn.arguments) resolveInputPorts(fn);
+  if (fn.returns.some(value => value.list) || fn.args.some(value => value.list && !Object.hasOwn(fn.arguments ?? {}, value.name))) return 'List-valued ports are not implemented by the current property mappings.';
   if (fn.returns.some(value => value.optional)) return 'Optional return values are not handled by the current output conversion.';
   const unsupported = new Set(['Device', 'Layout', 'MemoryFormat', 'Generator', 'Dimname', 'Stream', 'QScheme', 'Unknown']);
   const kinds = [...new Set([...fn.args, ...fn.returns].map(value => value.kind).filter(kind => unsupported.has(kind)))];
@@ -41,7 +43,7 @@ export function createReview(catalogText, schemaText, mode = 'categories') {
     if (!fn) throw new Error(`Schema missing for ${op}; use the catalog's matching native_functions.yaml`);
     const family = mode === 'labels' ? op : fn.baseName.endsWith('_') && !fn.baseName.endsWith('__') ? fn.baseName.slice(0, -1) : fn.baseName;
     if (!families.has(family)) families.set(family, []);
-    families.get(family).push({ op, schema: fn.rawFunc, namespace: options.namespace, reason: options.enabled === false ? options.reason ?? 'Previously disabled by the user.' : exclusion(fn) });
+    families.get(family).push({ op, schema: fn.rawFunc, namespace: options.namespace, reason: options.enabled === false ? options.reason ?? 'Previously disabled by the user.' : exclusion({ ...fn, arguments: options.arguments }) });
   }
   return {
     version: 1, mode, originalHash: digest(catalogText),

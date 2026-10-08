@@ -61,7 +61,7 @@ class CaptureTests(unittest.TestCase):
         with self.assertRaisesRegex(CaptureError, "flat tensor inputs"):
             capture_program(AddReLU(), (torch.ones(2), 1))
 
-    def test_rejects_tensor_constants_and_list_arguments(self):
+    def test_rejects_tensor_constants_and_captures_integer_sequences(self):
         class Constant(torch.nn.Module):
             def forward(self, x):
                 return x + torch.tensor([1., 2.])
@@ -70,8 +70,8 @@ class CaptureTests(unittest.TestCase):
         class Reshape(torch.nn.Module):
             def forward(self, x):
                 return x.reshape([1, 2])
-        with self.assertRaisesRegex(CaptureError, "Unsupported argument type"):
-            capture_program(Reshape(), (torch.ones(2),))
+        program = capture_program(Reshape(), (torch.ones(2),))
+        self.assertEqual(program["operations"][0]["args"][1], {"items": [{"literal": 1}, {"literal": 2}]})
 
     def test_python_to_nodegraph_cli(self):
         with tempfile.TemporaryDirectory(prefix="tora-capture-") as directory:
@@ -103,6 +103,50 @@ fs.writeFileSync(process.argv[1], JSON.stringify(buildNodeRegistry(schemas.map(s
                                       "examples/add_relu.py:missing", "--out", str(program)], cwd=ROOT, capture_output=True)
             self.assertNotEqual(failure.returncode, 0)
             self.assertEqual(program.read_bytes(), before)
+
+    def test_convolutions_capture_and_export_scalar_ports(self):
+        class Conv1d(torch.nn.Module):
+            def forward(self, x, w):
+                return torch.nn.functional.conv1d(x, w, stride=2, padding=1)
+        class Conv2d(torch.nn.Module):
+            def forward(self, x, w):
+                return torch.nn.functional.conv2d(x, w, stride=(2, 1), padding=(1, 0), dilation=(1, 2))
+        examples = [(Conv1d(), (torch.randn(1, 1, 8), torch.randn(1, 1, 3))),
+                    (Conv2d(), (torch.randn(1, 1, 8, 9), torch.randn(1, 1, 3, 2)))]
+        for n, (model, args) in enumerate(examples, 1):
+            with self.subTest(dimensions=n), tempfile.TemporaryDirectory(prefix="tora-conv-") as directory:
+                program = capture_program(model, args)
+                op = program["operations"][0]
+                self.assertEqual(op["operator"], f"aten.conv{n}d.default")
+                values = dict(zip((p['id'] for p in program['inputs']), args))
+                def resolve(argument):
+                    if 'items' in argument:
+                        return [resolve(item) for item in argument['items']]
+                    return values[argument['value']] if 'value' in argument else argument['literal']
+                result = getattr(torch.ops.aten, f'conv{n}d').default(
+                    *(resolve(arg) for arg in op['args']), **{key: resolve(arg) for key, arg in op['kwargs'].items()})
+                torch.testing.assert_close(result, model(*args))
+                work = Path(directory)
+                program_path, registry_path, graph_path = [work / name for name in ('program.json', 'registry.json', 'graph.json')]
+                program_path.write_text(json.dumps(program))
+                script = """
+import fs from 'node:fs';
+import {buildNodeRegistry} from './dist/registry.js';
+import {parseFuncSchema} from './dist/schemaParser.js';
+import {filterSubset} from './dist/subset.js';
+import {defaultConfig} from './dist/config.js';
+const schemas = [1,2].map(n=>`conv${n}d(Tensor input, Tensor weight, Tensor? bias=None, SymInt[${n}] stride=1, SymInt[${n}] padding=0, SymInt[${n}] dilation=1, SymInt groups=1) -> Tensor`);
+const selected = await filterSubset(schemas.map(s=>parseFuncSchema(s,[],[])),defaultConfig.subset,undefined,'config/operations.yaml');
+fs.writeFileSync(process.argv[1],JSON.stringify(buildNodeRegistry(selected)));
+"""
+                subprocess.run(['node', '--input-type=module', '-e', script, str(registry_path)], cwd=ROOT, check=True, capture_output=True)
+                subprocess.run(['node', 'dist/graphCli.js', '--program', str(program_path), '--registry', str(registry_path), '--out', str(graph_path)], cwd=ROOT, check=True, capture_output=True)
+                graph = json.loads(graph_path.read_text())
+                properties = graph['Nodes']['1']['Properties']
+                expected = {'Stride': 2, 'Padding': 1, 'Dilation': 1, 'Groups': 1} if n == 1 else {
+                    'Stride Height': 2, 'Stride Width': 1, 'Padding Height': 1, 'Padding Width': 0,
+                    'Dilation Height': 1, 'Dilation Width': 2, 'Groups': 1}
+                self.assertEqual(properties, expected)
 
 
 if __name__ == "__main__":

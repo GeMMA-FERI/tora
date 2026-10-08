@@ -1,13 +1,14 @@
 import { makeDisplayName, makeNodeClassName, signatureUuid } from "./naming.js";
 import { EDITOR_PROFILE, editorTypeForProperty } from "./editor.js";
-import { inputPortKey, outputPortKey, renderInputAliasType, renderReturnAliasType } from "./templates.js";
+import { outputPortKey, renderReturnAliasType } from "./templates.js";
 import type { TorchFunction } from "./types.js";
+import { resolveInputPorts } from "./inputPorts.js";
 
 // This describes generated bindings, not verified runtime capabilities. Defaults
 // remain schema text until the compiler converts them to typed graph constants.
 export function buildNodeRegistry(functions: TorchFunction[]) {
   return {
-    version: 1 as const,
+    version: 2 as 1 | 2,
     editorProfile: EDITOR_PROFILE,
     operations: functions.map(fn => ({
       operator: `aten.${fn.baseName}.${fn.overloadName || "default"}`,
@@ -17,17 +18,18 @@ export function buildNodeRegistry(functions: TorchFunction[]) {
       className: makeNodeClassName(fn),
       name: fn.displayName ?? makeDisplayName(fn),
       description: fn.description ?? `Auto-generated from PyTorch signature: ${fn.rawFunc}`,
-      inputs: fn.args.map(arg => ({
+      inputs: resolveInputPorts(fn).map(({ argument: arg, key, cppType, split }) => ({
         argument: arg.name,
-        key: inputPortKey(arg),
-        type: arg.rawType,
-        kind: arg.kind,
+        key,
+        type: split ? "int" : arg.rawType,
+        kind: split ? "Int" as const : arg.kind,
         optional: arg.optional,
-        list: arg.list,
+        list: split ? false : arg.list,
+        split,
         keywordOnly: arg.kwOnly,
         defaultExpression: arg.defaultValue,
-        cppPropertyType: renderInputAliasType(arg),
-        editorType: editorTypeForProperty(renderInputAliasType(arg)),
+        cppPropertyType: cppType,
+        editorType: editorTypeForProperty(cppType),
       })),
       outputs: fn.returns.map((ret, index) => ({
         index,

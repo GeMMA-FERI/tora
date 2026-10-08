@@ -123,6 +123,7 @@ function parseArgument(token: string, kwOnly: boolean): TorchArgument {
     kind: classifyKind(rawType),
     optional: meta.optional,
     list: meta.list,
+    listLength: /\[(\d+)\]/.test(rawType) ? Number(/\[(\d+)\]/.exec(rawType)![1]) : undefined,
     kwOnly,
     defaultValue
   };
