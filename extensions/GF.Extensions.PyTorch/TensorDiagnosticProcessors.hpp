@@ -8,7 +8,6 @@ struct TensorFromTextProcessor : GF::Extensions::impl::DataProcessorBridgeImpl<T
     static constexpr auto interface_id() { return Core::interfaces::interface_id_storage<GF::Interfaces::Ext::IDataProcessor>::value; }
     static ::Data::Properties create_metadata() {
         ::Data::Properties metadata;
-        AddNamespace<PyTorch::NodeNamespaces::Convolution>(metadata);
         AddMaintainer<"Mitko Nikov">(metadata);
         return metadata;
     }
@@ -39,6 +38,11 @@ struct TensorToTextProcessor : GF::Extensions::impl::DataProcessorBridgeImpl<Ten
     static constexpr auto name() { return std::string_view("Tensor To Text"); }
     static constexpr auto description() { return std::string_view("Copies a tensor to CPU when necessary and formats its values, shape and dtype for inspection."); }
     static constexpr auto interface_id() { return Core::interfaces::interface_id_storage<GF::Interfaces::Ext::IDataProcessor>::value; }
+    static ::Data::Properties create_metadata() {
+        ::Data::Properties metadata;
+        AddMaintainer<"Mitko Nikov">(metadata);
+        return metadata;
+    }
 
     // {D420B414-433B-46F4-84D7-A986A4F27E86}
     static constexpr auto implementation_id() {
