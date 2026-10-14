@@ -182,18 +182,26 @@ the editor does not enforce this metadata and may drop it when re-exporting.
 This metadata is not a complete serialization of PyTorch export guards.
 Tensor contents and model weights are not embedded in the generated graph.
 
-The PyTorch tensor provider supports the optional SDK `ITensorValueReader`
-interface for TensorEditor previews. Build against an SDK containing
-`Data/TensorReader.hpp`. Older providers can still display metadata in the editor.
-The viewer displays read-only pages of up to 256 values with tensor coordinates.
-CPU tensors load automatically when opened; device tensors require clicking
-Read values to copy the requested page to CPU. Dense, non-quantized tensors with
-storage are supported, including non-contiguous views. Editing values is not yet
-implemented.
+The PyTorch tensor provider implements `ITensor::ReadRegion` with `IArray`
+origin and shape inputs containing one Int64 per dimension. Region reads return
+independent, contiguous CPU tensors with the original dtype and rank. The editor
+formats their values through read-only host access; it displays pages of up to
+256 elements and copies only requested row regions. Device reads require clicking
+Read values. Dense, non-quantized tensors with storage are supported, including
+non-contiguous views. Editing values is not yet implemented.
 
-Run `scripts\test-tensor-values.cmd` to check native CPU value previews with
-libtorch. This tests value formatting, views, paging, and invalid inputs; it does
-not test window behavior or GPU transfers in the editor.
+Rebuild the SDK consumers, Node Editor, and extension together after this
+`ITensor` ABI change; binaries implementing the older interface are incompatible.
+Callers must prevent concurrent mutation during a region read and retain the
+returned tensor while using its host pointer.
+
+Run `scripts\test-tensor-region.cmd` to check native CPU region reads with
+libtorch. It checks coordinates, independent storage, dtypes, views, scalars,
+empty regions, and invalid inputs. It does not test window behavior or GPU
+transfers in the editor.
+
+Run `scripts\test-tensor-region-abi.cmd` with the updated local SDK to check the
+`IArray` ABI boundary, malformed inputs, snapshot ownership, and host access.
 
 Run the capture and full Python-to-JSON tests after building TypeScript:
 

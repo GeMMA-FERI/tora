@@ -1,8 +1,8 @@
 #pragma once
 
 #include <Data/Tensor.hpp>
-#include <Data/TensorReader.hpp>
-#include "TensorValues.hpp"
+#include "TensorRegion.hpp"
+#include <cstring>
 #include <Data/TypedArray.hpp>
 #include <torch/torch.h>
 
@@ -207,7 +207,7 @@ namespace PyTorch
         }
     }
 
-    class TensorImpl final : public Data::Interfaces::ITensor, public Data::Interfaces::ITensorValueReader
+    class TensorImpl final : public Data::Interfaces::ITensor
     {
     public:
         FC_II_IMPLEMENTBASE;
@@ -217,14 +217,42 @@ namespace PyTorch
             Core::throw_if_false(m_Tensor.defined(), "Cannot wrap an undefined PyTorch tensor.");
         }
 
-        void _abi_ReadValues(Core::UInt64 start, Core::UInt64 count, bool allowDeviceCopy,
-            Data::Interfaces::IObjectList** valuesOut, Core::IErrorCode** errorOut) const override
+        void _abi_ReadRegion(Data::Interfaces::IArray const* originIn,
+            Data::Interfaces::IArray const* shapeIn, Data::Interfaces::ITensor** resultOut,
+            Core::IErrorCode** errorOut) const override
         {
             Core::call_and_translate_exception_for_dll_boundary([&] {
-                Core::throw_if_invalid(valuesOut);
-                *valuesOut = nullptr;
-                Data::StringList values(PyTorch::ReadTensorValues(m_Tensor, start, count, allowDeviceCopy));
-                values.detach_abi(valuesOut);
+                Core::throw_if_invalid(resultOut);
+                *resultOut = nullptr;
+                auto readDimensions = [&](Data::Interfaces::IArray const* array) {
+                    Core::throw_if_invalid(array);
+                    const auto rank = static_cast<size_t>(m_Tensor.dim());
+                    Core::throw_if_false(array->GetCount() == rank && array->GetStride() == sizeof(Core::Int64),
+                        "Region arrays must contain one Int64 per tensor dimension.");
+                    Core::throw_if_false(rank <= std::numeric_limits<size_t>::max() / sizeof(Core::Int64) &&
+                        array->GetBytes() == rank * sizeof(Core::Int64), "Invalid region array storage.");
+                    std::vector<int64_t> values(rank);
+                    if (rank) {
+                        Core::throw_if_invalid(array->GetData());
+                        std::memcpy(values.data(), array->GetData(), rank * sizeof(Core::Int64));
+                    }
+                    return values;
+                };
+                auto origin = readDimensions(originIn);
+                auto shape = readDimensions(shapeIn);
+                *resultOut = new TensorImpl(PyTorch::ReadTensorRegion(m_Tensor, origin, shape));
+            }, errorOut);
+        }
+
+        void _abi_GetHostData(void const** resultOut, Core::IErrorCode** errorOut) const override
+        {
+            Core::call_and_translate_exception_for_dll_boundary([&] {
+                Core::throw_if_invalid(resultOut);
+                *resultOut = nullptr;
+                Core::throw_if_false(m_Tensor.device().is_cpu() && m_Tensor.layout() == at::kStrided &&
+                    m_Tensor.is_contiguous() && !m_Tensor.is_quantized() && !m_Tensor.is_conj() && !m_Tensor.is_neg(),
+                    "Host data requires resolved, contiguous CPU storage. Read a region first.");
+                *resultOut = m_Tensor.const_data_ptr();
             }, errorOut);
         }
 
