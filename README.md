@@ -203,16 +203,42 @@ transfers in the editor.
 Run `scripts\test-tensor-region-abi.cmd` with the updated local SDK to check the
 `IArray` ABI boundary, malformed inputs, snapshot ownership, and host access.
 
-In TensorEditor, **Heatmap** opens a D3D slice viewer. The last two dimensions
+TensorEditor displays values on the left and a D3D heatmap panel on the right.
+CPU slices load automatically; use **Read slice** for device tensors. The last two dimensions
 are the image axes; enter indices for the leading dimensions (for example,
-`0, 3` for batch 0, channel 3 of an NCHW tensor), or use Previous/Next. Opening
-the heatmap or reading a slice copies that region to CPU when needed. Choose
+`0, 3` for batch 0, channel 3 of an NCHW tensor), or use Previous/Next. Reading
+a device slice copies that region to CPU. Choose
 Neon, Diverging, or Gray palettes, optional contours, and Auto/Locked ranges.
 Hover shows the original typed value; colors use a floating-point display
 representation. Magenta marks NaN or infinity. Real numeric and Boolean tensors
 with at least two dimensions are supported, up to 4096 per image axis and
 4,194,304 elements per slice. Complex tensors and empty image dimensions are
 reported as unsupported.
+
+For a larger convolution example, run from the repository root:
+
+```powershell
+_build/capture-venv/Scripts/python.exe examples/save_conv2d_features.py
+npm run build
+node examples/conv2d-features.mjs
+```
+
+Open `_build/conv2d-features.nodegraph.json` in the Node Editor. Its 18 nodes load
+the input and weights from `_build/conv2d-features.safetensors`, then run four
+convolution/ReLU stages: 5×5 feature filters, dilated depthwise convolution,
+1×1 channel mixing, and stride-2 downsampling. The two-image input has shape
+`[2, 3, 96, 128]`; the final output is `[2, 6, 48, 64]`. The graph also exposes
+the input and each intermediate activation for inspection. Try slice indices
+`0, 0`, `0, 3`, or `1, 5` on the final tensor, and lock the range to compare channels.
+These are deterministic demonstration filters, not a trained model.
+
+The configuration is in `examples/conv2d-features.json`. Generated graphs store
+an absolute Base Directory for their relative tensor filename; regenerate the
+graph or update that property if moving the files to another machine. Python
+writes reference tensors and summary statistics separately. Run
+`scripts\test-convolution-features.cmd` to compare all four native generated
+convolution/ReLU stages against those references. This does not execute the graph
+inside the Node Editor.
 
 Run the capture and full Python-to-JSON tests after building TypeScript:
 
