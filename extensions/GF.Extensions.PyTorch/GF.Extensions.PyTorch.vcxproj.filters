@@ -206,6 +206,9 @@
     <ClInclude Include="TensorImpl.hpp">
       <Filter>Header Files\Internal</Filter>
     </ClInclude>
+    <ClInclude Include="TensorValues.hpp">
+      <Filter>Header Files\Internal</Filter>
+    </ClInclude>
     <ClInclude Include="TensorFromTypedArrayProcessor.hpp">
       <Filter>Header Files\Processors</Filter>
     </ClInclude>

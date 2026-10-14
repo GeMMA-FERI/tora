@@ -182,6 +182,19 @@ the editor does not enforce this metadata and may drop it when re-exporting.
 This metadata is not a complete serialization of PyTorch export guards.
 Tensor contents and model weights are not embedded in the generated graph.
 
+The PyTorch tensor provider supports the optional SDK `ITensorValueReader`
+interface for TensorEditor previews. Build against an SDK containing
+`Data/TensorReader.hpp`. Older providers can still display metadata in the editor.
+The viewer displays read-only pages of up to 256 values with tensor coordinates.
+CPU tensors load automatically when opened; device tensors require clicking
+Read values to copy the requested page to CPU. Dense, non-quantized tensors with
+storage are supported, including non-contiguous views. Editing values is not yet
+implemented.
+
+Run `scripts\test-tensor-values.cmd` to check native CPU value previews with
+libtorch. This tests value formatting, views, paging, and invalid inputs; it does
+not test window behavior or GPU transfers in the editor.
+
 Run the capture and full Python-to-JSON tests after building TypeScript:
 
 ```powershell

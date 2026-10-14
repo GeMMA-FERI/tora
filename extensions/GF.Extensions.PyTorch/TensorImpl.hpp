@@ -1,6 +1,8 @@
 #pragma once
 
 #include <Data/Tensor.hpp>
+#include <Data/TensorReader.hpp>
+#include "TensorValues.hpp"
 #include <Data/TypedArray.hpp>
 #include <torch/torch.h>
 
@@ -205,7 +207,7 @@ namespace PyTorch
         }
     }
 
-    class TensorImpl final : public Data::Interfaces::ITensor
+    class TensorImpl final : public Data::Interfaces::ITensor, public Data::Interfaces::ITensorValueReader
     {
     public:
         FC_II_IMPLEMENTBASE;
@@ -213,6 +215,17 @@ namespace PyTorch
         explicit TensorImpl(at::Tensor tensor) : m_Tensor(std::move(tensor))
         {
             Core::throw_if_false(m_Tensor.defined(), "Cannot wrap an undefined PyTorch tensor.");
+        }
+
+        void _abi_ReadValues(Core::UInt64 start, Core::UInt64 count, bool allowDeviceCopy,
+            Data::Interfaces::IObjectList** valuesOut, Core::IErrorCode** errorOut) const override
+        {
+            Core::call_and_translate_exception_for_dll_boundary([&] {
+                Core::throw_if_invalid(valuesOut);
+                *valuesOut = nullptr;
+                Data::StringList values(PyTorch::ReadTensorValues(m_Tensor, start, count, allowDeviceCopy));
+                values.detach_abi(valuesOut);
+            }, errorOut);
         }
 
         at::Tensor const& GetTorchTensor() const noexcept
