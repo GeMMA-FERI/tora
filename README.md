@@ -203,6 +203,17 @@ transfers in the editor.
 Run `scripts\test-tensor-region-abi.cmd` with the updated local SDK to check the
 `IArray` ABI boundary, malformed inputs, snapshot ownership, and host access.
 
+In TensorEditor, **Heatmap** opens a D3D slice viewer. The last two dimensions
+are the image axes; enter indices for the leading dimensions (for example,
+`0, 3` for batch 0, channel 3 of an NCHW tensor), or use Previous/Next. Opening
+the heatmap or reading a slice copies that region to CPU when needed. Choose
+Neon, Diverging, or Gray palettes, optional contours, and Auto/Locked ranges.
+Hover shows the original typed value; colors use a floating-point display
+representation. Magenta marks NaN or infinity. Real numeric and Boolean tensors
+with at least two dimensions are supported, up to 4096 per image axis and
+4,194,304 elements per slice. Complex tensors and empty image dimensions are
+reported as unsupported.
+
 Run the capture and full Python-to-JSON tests after building TypeScript:
 
 ```powershell
