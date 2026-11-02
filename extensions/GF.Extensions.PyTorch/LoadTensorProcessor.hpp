@@ -1,23 +1,24 @@
 #pragma once
 #include "Helpers.hpp"
 #include "SafeTensorLoader.hpp"
+#include "generated/TensorLoaderBinding.hpp"
 
 struct LoadTensorProcessor : GF::Extensions::impl::DataProcessorBridgeImpl<LoadTensorProcessor> {
-    static constexpr auto name() { return std::string_view("Load Tensor"); }
-    static constexpr auto description() { return std::string_view("Loads a named tensor from a Safetensors file into owned CPU memory."); }
+    static constexpr auto name() { return TensorLoaderBinding::name(); }
+    static constexpr auto description() { return TensorLoaderBinding::description(); }
     static constexpr auto interface_id() { return Core::interfaces::interface_id_storage<GF::Interfaces::Ext::IDataProcessor>::value; }
     // {3A6A2744-F014-45D9-BB93-3D96C9F6B152}
-    static constexpr auto implementation_id() { return Core::Uuid(0x3a6a2744, 0xf014, 0x45d9, { 0xbb, 0x93, 0x3d, 0x96, 0xc9, 0xf6, 0xb1, 0x52 }); }
+    static constexpr auto implementation_id() { return TensorLoaderBinding::implementation_id(); }
     static auto create_instance() { return Core::make_base_obj<LoadTensorProcessor>().as<Core::Object>(); }
     static Data::Properties create_metadata() {
         Data::Properties metadata;
         AddNamespace<"PyTorch::IO">(metadata);
         return metadata;
     }
-    using In_file = Data::FilePathProperty<"File", "Safetensors file. Relative paths require Base Directory.">;
-    using In_name = Data::StringProperty<"Tensor Name", "Exact tensor key in the file, for example linear.weight.">;
-    using In_base = Data::StringProperty<"Base Directory", "Optional absolute directory used to resolve a relative File.">;
-    using Out_tensor = Data::TensorProperty<"Tensor", "Loaded contiguous CPU tensor with its original shape and dtype.">;
+    using In_file = TensorLoaderBinding::In_file;
+    using In_name = TensorLoaderBinding::In_name;
+    using In_base = TensorLoaderBinding::In_base;
+    using Out_tensor = TensorLoaderBinding::Out_tensor;
 
     LoadTensorProcessor() {
         RegisterInput<In_file>();

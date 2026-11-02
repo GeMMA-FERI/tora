@@ -28,7 +28,11 @@ async function main() {
   };
   const program = parseProgramDocument(await readJson(programPath));
   const registry = parseRegistryDocument(await readJson(registryPath));
-  const graph = exportNodeGraph(program, registry);
+  const graph = exportNodeGraph(program, registry, { resourceDirectory: path.dirname(programPath) });
+  for (const resource of program.resources ?? []) {
+    const resourcePath = path.resolve(path.dirname(programPath), resource.file);
+    if (normalize(resourcePath) === normalize(outputPath)) throw new Error("Output must not overwrite a tensor resource");
+  }
   await mkdir(path.dirname(outputPath), { recursive: true });
   await writeFile(outputPath, JSON.stringify(graph, null, 2) + "\n", "utf8");
   console.log(`Exported ${Object.keys(graph.Nodes).length} nodes and ${Object.keys(graph.Edges).length} edges to ${outputPath}`);

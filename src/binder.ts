@@ -6,6 +6,7 @@ type InputPort = Binding["inputs"][number];
 type Port = InputPort | Binding["outputs"][number];
 export type ValueSource =
   | { input: string; type: ValueType }
+  | { resource: string; type: "Tensor" }
   | { operation: string; key: string; type: ValueType };
 export type BoundArgument = ValueSource | { literal: number | boolean | string | null };
 export interface BoundOperation {
@@ -17,8 +18,9 @@ export interface BoundOperation {
   source?: string;
 }
 export interface BoundProgram {
-  version: 1;
+  version: 1 | 2;
   inputs: Program["inputs"];
+  resources: NonNullable<Program["resources"]>;
   operations: BoundOperation[];
   outputs: { name: string; source: ValueSource }[];
 }
@@ -91,7 +93,8 @@ function bindArgument(argument: Argument, port: InputPort, operation: Operation,
 }
 
 export function bindProgram(program: Program, registry: NodeRegistry): BoundProgram {
-  if (program.version !== 1 || ![1, 2].includes(registry.version)) throw new Error("Unsupported program or registry version");
+  if (![1, 2].includes(program.version) || ![1, 2].includes(registry.version)) throw new Error("Unsupported program or registry version");
+  if (program.resources !== undefined && program.version !== 2) throw new Error("Tensor resources require program version 2");
   const bindings = new Map<string, Binding>();
   for (const binding of registry.operations) {
     if (bindings.has(binding.operator)) throw new Error(`Duplicate registry operator ${binding.operator}`);
@@ -105,6 +108,12 @@ export function bindProgram(program: Program, registry: NodeRegistry): BoundProg
   for (const input of program.inputs) {
     if (!supportedTypes.has(input.type)) throw new Error(`Unsupported input type ${input.type} on ${input.id}`);
     addValue(input.id, { input: input.id, type: input.type });
+  }
+  for (const resource of program.resources ?? []) {
+    if (resource.type !== "Tensor" || !resource.file || !resource.key || resource.id.includes("\0") || resource.file.includes("\0") || resource.key.includes("\0")) {
+      throw new Error(`Invalid tensor resource ${resource.id}`);
+    }
+    addValue(resource.id, { resource: resource.id, type: "Tensor" });
   }
   const ids = new Set<string>();
   const operations: BoundOperation[] = [];
@@ -176,5 +185,6 @@ export function bindProgram(program: Program, registry: NodeRegistry): BoundProg
     if (!source) throw new Error(`Unknown output value ${output.value}`);
     return { name: output.name, source: { ...source } };
   });
-  return { version: 1, inputs: program.inputs.map(input => ({ ...input })), operations, outputs };
+  return { version: program.version, inputs: program.inputs.map(input => ({ ...input })),
+    resources: (program.resources ?? []).map(resource => ({ ...resource })), operations, outputs };
 }

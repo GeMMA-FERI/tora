@@ -1,4 +1,5 @@
-// Version 1 is a straight-line program in execution order. Value IDs are local
+// Programs are straight-line operations in execution order. Version 2 adds
+// external tensor resources; version 1 remains valid without resources. IDs are local
 // to the program; they are neither editor instance UUIDs nor terminal keys.
 export type ValueType = "Tensor" | "Scalar" | "Int" | "Float" | "Bool" | "Str";
 
@@ -17,8 +18,9 @@ export interface Operation {
 }
 
 export interface Program {
-  version: 1;
+  version: 1 | 2;
   inputs: { id: string; type: ValueType }[];
+  resources?: { id: string; type: "Tensor"; file: string; key: string }[];
   operations: Operation[];
   outputs: { name: string; value: string }[];
   capture?: {

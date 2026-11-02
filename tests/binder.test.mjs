@@ -63,7 +63,7 @@ test('invalid bindings fail with an operation and source diagnostic', () => {
 
 test('duplicate identities and missing graph outputs are rejected', () => {
   const cases = [
-    [p => p.version = 2, /version/],
+    [p => p.version = 3, /version/],
     [p => p.inputs.push(p.inputs[0]), /duplicate value/],
     [p => p.operations[1].id = 'add', /duplicate operation/],
     [p => p.operations[0].outputs = ['x'], /duplicate value/],

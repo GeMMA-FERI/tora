@@ -1,6 +1,7 @@
 import { EDITOR_PROFILE, editorTypeForProperty } from "./editor.js";
 import type { Program } from "./program.js";
 import type { NodeRegistry } from "./registry.js";
+import { tensorLoaderBinding } from "./tensorResources.js";
 
 type JsonObject = Record<string, unknown>;
 function object(value: unknown, path: string): JsonObject {
@@ -36,8 +37,20 @@ function argument(value: unknown, path: string, allowItems = true) {
 
 export function parseProgramDocument(value: unknown): Program {
   const root = object(value, "program");
-  keys(root, ["version", "inputs", "operations", "outputs", "capture"], "program");
-  if (root.version !== 1) throw new Error("program.version: expected 1");
+  keys(root, ["version", "inputs", "resources", "operations", "outputs", "capture"], "program");
+  if (root.version !== 1 && root.version !== 2) throw new Error("program.version: expected 1 or 2");
+  if (root.resources !== undefined) {
+    if (root.version !== 2) throw new Error("program.resources: requires version 2");
+    for (const [i, entry] of array(root.resources, "program.resources").entries()) {
+      const path = `program.resources[${i}]`;
+      const resource = object(entry, path);
+      keys(resource, ["id", "type", "file", "key"], path);
+      if (resource.type !== "Tensor") throw new Error(`${path}.type: expected Tensor`);
+      for (const key of ["id", "file", "key"]) {
+        if (string(resource[key], `${path}.${key}`).includes("\0")) throw new Error(`${path}.${key}: NUL bytes are not supported`);
+      }
+    }
+  }
   for (const [i, entry] of array(root.inputs, "program.inputs").entries()) {
     const path = `program.inputs[${i}]`;
     const input = object(entry, path);
@@ -94,6 +107,27 @@ export function parseProgramDocument(value: unknown): Program {
 export function parseRegistryDocument(value: unknown): NodeRegistry {
   const root = object(value, "registry");
   if (![1, 2].includes(root.version as number) || root.editorProfile !== EDITOR_PROFILE) throw new Error(`Registry version/profile mismatch; regenerate with this Tora version (${EDITOR_PROFILE})`);
+  if (root.tensorLoader !== undefined) {
+    const actual = object(root.tensorLoader, "registry.tensorLoader");
+    const expected = tensorLoaderBinding();
+    for (const key of ["implementationId", "name", "description"] as const) {
+      if (actual[key] !== expected[key]) throw new Error(`registry.tensorLoader.${key}: regenerate the registry`);
+    }
+    for (const side of ["inputs", "outputs"] as const) {
+      const ports = object(actual[side], `registry.tensorLoader.${side}`);
+      for (const [role, port] of Object.entries(expected[side])) {
+        const location = `registry.tensorLoader.${side}.${role}`;
+        const value = object(ports[role], location);
+        for (const key of ["key", "description", "cppPropertyType"] as const) {
+          if (value[key] !== port[key]) throw new Error(`${location}.${key}: regenerate the registry`);
+        }
+        const type = object(value.editorType, `${location}.editorType`);
+        for (const [key, expected] of Object.entries(port.editorType)) {
+          if (type[key] !== expected) throw new Error(`${location}.editorType.${key}: does not match editor profile`);
+        }
+      }
+    }
+  }
   for (const [i, entry] of array(root.operations, "registry.operations").entries()) {
     const path = `registry.operations[${i}]`;
     const op = object(entry, path);

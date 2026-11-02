@@ -23,6 +23,7 @@ const PROPERTY_TYPES: Record<string, EditorType> = {
   IntegralProperty: { ValueType: 5, ClassType: "__int64", InterfaceType: "__int64" },
   BooleanProperty: { ValueType: 15, ClassType: "struct Core::Bool", InterfaceType: "struct Core::Bool" },
   StringProperty: { ValueType: 19, ClassType: "struct Data::String", InterfaceType: "struct Data::Interfaces::IString" },
+  FilePathProperty: { ValueType: 19, ClassType: "struct Data::String", InterfaceType: "struct Data::Interfaces::IString" },
   EnumProperty: { ValueType: 17, ClassType: "struct Data::Enum", InterfaceType: "struct Data::Interfaces::IEnum" },
 };
 

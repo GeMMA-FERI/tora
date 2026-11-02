@@ -3,6 +3,7 @@ import { EDITOR_PROFILE, editorTypeForProperty } from "./editor.js";
 import { outputPortKey, renderReturnAliasType } from "./templates.js";
 import type { TorchFunction } from "./types.js";
 import { resolveInputPorts } from "./inputPorts.js";
+import { tensorLoaderBinding, type TensorLoaderBinding } from "./tensorResources.js";
 
 // This describes generated bindings, not verified runtime capabilities. Defaults
 // remain schema text until the compiler converts them to typed graph constants.
@@ -10,6 +11,7 @@ export function buildNodeRegistry(functions: TorchFunction[]) {
   return {
     version: 2 as 1 | 2,
     editorProfile: EDITOR_PROFILE,
+    tensorLoader: tensorLoaderBinding(),
     operations: functions.map(fn => ({
       operator: `aten.${fn.baseName}.${fn.overloadName || "default"}`,
       schema: fn.rawFunc,
@@ -46,4 +48,4 @@ export function buildNodeRegistry(functions: TorchFunction[]) {
   };
 }
 
-export type NodeRegistry = ReturnType<typeof buildNodeRegistry>;
+export type NodeRegistry = Omit<ReturnType<typeof buildNodeRegistry>, "tensorLoader"> & { tensorLoader?: TensorLoaderBinding };

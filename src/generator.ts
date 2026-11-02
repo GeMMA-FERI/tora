@@ -6,6 +6,7 @@ import { filterSubset } from "./subset.js";
 import { makeNodeClassName } from "./naming.js";
 import { renderNodeDefinition } from "./renderer.js";
 import { buildNodeRegistry } from "./registry.js";
+import { renderTensorLoaderBinding } from "./tensorResources.js";
 import type { GeneratorConfig, TorchFunction } from "./types.js";
 
 interface RawNativeFunction {
@@ -98,6 +99,7 @@ export async function runGenerator(config: GeneratorConfig): Promise<void> {
   await mkdir(config.outDir, { recursive: true });
   const nodesDir = path.join(config.outDir, "nodes");
   await mkdir(nodesDir, { recursive: true });
+  await writeFile(path.join(config.outDir, "TensorLoaderBinding.hpp"), renderTensorLoaderBinding(), "utf-8");
 
   const manifestLines: string[] = [];
   const classNames: string[] = [];

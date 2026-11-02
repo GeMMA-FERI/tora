@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import path from "node:path";
 import { bindProgram, type ValueSource } from "./binder.js";
 import { EDITOR_PROFILE, genericIO, type EditorNodeBase } from "./editor.js";
 import type { Program } from "./program.js";
@@ -18,11 +19,18 @@ export interface NodeGraph {
   Tora?: { capture: NonNullable<Program["capture"]> };
 }
 
-export function exportNodeGraph(program: Program, registry: NodeRegistry): NodeGraph {
+function absoluteResourcePath(file: string): boolean {
+  // Windows root-relative paths (\file) still depend on the current drive.
+  return path.isAbsolute(file) && !(process.platform === "win32" && /^[\\/]$/.test(path.parse(file).root));
+}
+
+export function exportNodeGraph(program: Program, registry: NodeRegistry,
+  options: { resourceDirectory?: string } = {}): NodeGraph {
   if (registry.editorProfile !== EDITOR_PROFILE) {
     throw new Error(`Expected editor profile ${EDITOR_PROFILE}; regenerate the registry with this Tora version`);
   }
   const bound = bindProgram(program, registry);
+  if (bound.resources.length && !registry.tensorLoader) throw new Error("Tensor resources require loader metadata; regenerate the registry");
   const graph: NodeGraph = { Nodes: {}, Edges: {}, NodeBases: {} };
   // Advisory provenance only: the editor currently does not enforce these
   // capture assumptions and may omit this field when it exports the graph.
@@ -52,10 +60,39 @@ export function exportNodeGraph(program: Program, registry: NodeRegistry): NodeG
     const io = genericIO("inputs", bound.inputs.map(input => ({ key: input.id, type: input.type })));
     inputId = addNode(io.implementationId, io.nodeBase, io.metadata, 0);
   }
+  const resourceNodes = new Map<string, string>();
+  if (bound.resources.length) {
+    const binding = registry.tensorLoader!;
+    const snapshot = (ports: typeof binding.inputs | typeof binding.outputs) => Object.fromEntries(
+      Object.values(ports).map(port => [port.key, { Description: port.description, ...port.editorType }]));
+    const base: EditorNodeBase = { Name: binding.name, Description: binding.description,
+      Inputs: snapshot(binding.inputs), Outputs: snapshot(binding.outputs) };
+    for (const resource of bound.resources) {
+      const directory = options.resourceDirectory;
+      const absolute = absoluteResourcePath(resource.file);
+      if (!absolute && path.parse(resource.file).root) {
+        throw new Error(`Tensor resource ${resource.id}: file must be absolute or relative without a drive/root prefix`);
+      }
+      if (!absolute && (!directory || !absoluteResourcePath(directory))) {
+        throw new Error(`Tensor resource ${resource.id}: relative file requires an absolute resourceDirectory`);
+      }
+      const properties: GraphNode["Properties"] = {
+        [binding.inputs.file.key]: resource.file,
+        [binding.inputs.name.key]: resource.key,
+      };
+      if (!absolute) properties[binding.inputs.base.key] = directory!;
+      resourceNodes.set(resource.id, addNode(binding.implementationId, base, {}, 0, properties));
+    }
+  }
   function sourceEndpoint(source: ValueSource): { node: string; key: string; depth: number } {
     if ("input" in source) {
       if (inputId === undefined) throw new Error(`Missing graph input ${source.input}`);
       return { node: inputId, key: source.input, depth: 0 };
+    }
+    if ("resource" in source) {
+      const node = resourceNodes.get(source.resource);
+      if (node === undefined) throw new Error(`Missing tensor resource ${source.resource}`);
+      return { node, key: registry.tensorLoader!.outputs.tensor.key, depth: 0 };
     }
     const node = nodeIds.get(source.operation);
     if (node === undefined) throw new Error(`Missing producer ${source.operation}`);

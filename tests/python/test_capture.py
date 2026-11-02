@@ -50,7 +50,7 @@ class CaptureTests(unittest.TestCase):
         self.assertEqual(op["operator"], "aten.max.dim")
         self.assertEqual([o["value"] for o in program["outputs"]], list(reversed(op["outputs"])))
 
-    def test_rejects_parameters_mutation_and_primitive_inputs(self):
+    def test_requires_resource_destination_and_rejects_mutation_and_primitive_inputs(self):
         with self.assertRaisesRegex(CaptureError, "PARAMETER"):
             capture_program(torch.nn.Linear(2, 2), (torch.ones(1, 2),))
         class Mutate(torch.nn.Module):
@@ -61,7 +61,7 @@ class CaptureTests(unittest.TestCase):
         with self.assertRaisesRegex(CaptureError, "flat tensor inputs"):
             capture_program(AddReLU(), (torch.ones(2), 1))
 
-    def test_rejects_tensor_constants_and_captures_integer_sequences(self):
+    def test_tensor_constants_require_storage_and_integer_sequences_capture(self):
         class Constant(torch.nn.Module):
             def forward(self, x):
                 return x + torch.tensor([1., 2.])
