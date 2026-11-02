@@ -4,7 +4,29 @@ Project which will contain extensions for the Tora adapter.
 
 ## Getting started
 
-To build extensions run `./bs.ps1 -Install` in pwsh.
+Generate the C++ headers and registry from the repository root first:
+
+```powershell
+npm run gen -- --source _build/native_functions.yaml
+```
+
+The current project targets the MSVC v145 toolset (VS2026). Open
+`extensions/GF.Extensions.sln`, select Release/x64, and build, or use a VS2026
+developer shell:
+
+```powershell
+msbuild extensions/GF.Extensions.sln /p:Configuration=Release /p:Platform=x64
+```
+
+Set the `GemmaFusionSdkDir` and `LibTorchDir` MSBuild properties if needed.
+The project defaults libtorch to `C:/GitHub/libtorch/libtorch`; the SDK defaults
+are in `extensions/GFSDK.props`. Deploy the resulting
+`extensions/_build/x64/Release/bin/GF.Extensions.PyTorch/` folder to the host's
+extension search root and reload/restart the host.
+
+The older `bs.ps1 -Install` bootstrap script currently searches for VS2019/2022;
+it does not discover VS2026 automatically. Use the solution/developer shell for
+the current toolset. See [development and validation](../docs/development.md).
 
 ## Load Tensor
 
@@ -55,7 +77,8 @@ VS2026, `VCPKG_ROOT`, the project-local capture environment, and `LibTorchDir`
 (default `C:\GitHub\libtorch\libtorch`). Tests include exact tensor bytes, Unicode
 paths, relative-path resolution, missing tensors, unsupported dtypes and malformed
 archives. These exercise the native loader; editor UI execution is a separate
-manual check. Python capture does not yet emit weight resources or loader nodes.
+manual check. Python capture now saves module weights and buffers as external resources; the
+graph exporter inserts loader nodes automatically. See [module capture](../docs/capture.md).
 
 ## Conv2d examples with local tensor sources
 

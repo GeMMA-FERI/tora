@@ -1,509 +1,108 @@
 # Tora
 
-Tora is a cute little 💖 automatic transpiler for PyTorch function definition to proprietary C++ code with bindings to the libtorch C++ API functions.
+Tora turns supported PyTorch models into graphs you can run in Gemma Fusion.
+It also generates the C++/libtorch processors that those graphs use.
 
-1. Reads PyTorch `native_functions.yaml`
-2. Parses function schemas into typed IR
-3. Filters by a file-based allowlist
-4. Emits C++ node definition files with deterministic IDs
+The workflow has two parts:
 
-## Project structure
+- **Build the extension:** select PyTorch operations and generate their C++ nodes
+  and a registry of bindings.
+- **Capture a model:** export a PyTorch module, save its weights in safetensors,
+  and turn the captured operations into a NodeGraph using that registry.
 
-- `src/cli.ts` - CLI entrypoint
-- `src/generator.ts` - end-to-end generation pipeline
-- `src/schemaParser.ts` - `func:` schema parser
-- `src/subset.ts` - subset filtering logic
-- `src/templates.ts` - per-argument/return template mapping
-- `src/renderer.ts` - C++ node rendering
-- `src/naming.ts` - naming + deterministic UUID generation
+Weights stay in external files. Graphs contain references to those files and can
+run in the Node Editor or through the NodeEngine CLI.
 
-## Install & run
+## Getting started
 
-```bash
+The current native workflow targets Windows/MSVC and requires Node.js/npm,
+Python, libtorch, and the Gemma Fusion SDK. Python capture is tested with
+Python 3.14 and PyTorch 2.12.1; use the matching libtorch release.
+
+Run these commands from the repository root:
+
+```powershell
 npm install
-npm run gen
-```
-
-Default output: `extensions/GF.Extensions.PyTorch/generated/nodes/*.hpp` + `extensions/GF.Extensions.PyTorch/generated/manifest.txt`
-
-Generation also writes `registry.json`, a versioned catalog for the graph compiler.
-It contains only the operations selected for that generation, with exact ATen
-overloads, implementation UUIDs, argument/return mappings to current terminal
-keys, schema types, and C++ property types. Terminal keys include the existing
-optional/list/keyword-only suffixes for ordinary ports and are shared with C++ generation.
-Registry version 2 adds ordered `split` mappings for arguments exposed as multiple
-scalar ports. The compiler also accepts version 1 registries without split mappings.
-Defaults are recorded as `defaultExpression` schema text, not evaluated values.
-The registry describes generated bindings; inclusion does not certify runtime
-support. Each port includes `editorType` with the editor's numeric `ValueType`,
-`ClassType`, and `InterfaceType`; the registry also records node names and
-descriptions for graph snapshots.
-Keep it with the extension generated from the same schema and configuration.
-
-The `editorProfile` identifies the Windows/MSVC serialization mapping in
-`src/editor.ts`. The initial `gemmafusionsuite-msvc-v1` profile was checked against
-the SDK's `Data::Structures::ValueType` enum and property aliases, and against
-the supplied `if.json` and `iter1.json` exports. Selected metadata from those
-exports is retained in `tests/fixtures/editor-types.json` for regression tests.
-This profile is explicit rather than assumed portable across SDKs or compilers.
-It describes serialization types, not permission to convert between them.
-
-`genericIO()` builds definitions and instance metadata for the existing Generic
-Inputs and Generic Outputs nodes. Native types use the editor's short enum-name
-form; tensor ports use the extended object form. Dynamic metadata uses
-`ClassName`, whereas `NodeBases` snapshots use `ClassType`. Tensor metadata is
-checked against the importer's implementation; import and execution in the
-running editor remain to be verified.
-
-## Graph compiler in progress
-
-`src/program.ts` defines a versioned, straight-line program with typed inputs,
-exact ATen operator names, positional/keyword arguments, and explicit result
-value IDs. Operations appear in dependency order. An argument is either
-`{ "value": "id" }` or `{ "literal": 1 }`; strings are literals only when wrapped
-in `literal`. `examples/add-relu.program.json` represents `relu(x + y)`.
-
-`bindProgram(program, registry)` from `src/binder.ts` resolves this representation
-to implementation IDs and terminal keys. It binds keyword arguments, supplies
-supported schema defaults, checks value references and types, and records each
-result's producing operation and port. Diagnostics include the operation ID,
-operator, and optional `source` location.
-
-After `npm run build`, the library can be used from JavaScript:
-
-```js
-import { readFile } from 'node:fs/promises';
-import { bindProgram } from './dist/binder.js';
-
-const program = JSON.parse(await readFile('examples/add-relu.program.json', 'utf8'));
-const registry = JSON.parse(await readFile('extensions/GF.Extensions.PyTorch/generated/registry.json', 'utf8'));
-const bound = bindProgram(program, registry);
-```
-
-This API currently expects documents matching the TypeScript interfaces; it is
-not an untrusted JSON parser. It supports Tensor, Scalar, Int, Float, Bool, and
-Str values, with finite numeric, boolean, string, and optional null literals.
-References require matching types. Numeric, `True`/`False`, `None`, and JSON-quoted
-string defaults are supported; other expressions are rejected without evaluation.
-An optional null literal represents an absent input value for future lowering.
-Fixed integer sequences use `{ "items": [{ "literal": 2 }, { "literal": 1 }] }`.
-Elements may also reference integer values using `{ "value": "id" }`. They bind
-only to configured fixed-size scalar ports; nested or variable-length lists,
-mutation, optional outputs, conversions, tensor resources, control flow,
-and symbolic constraints are not supported in this first binding pass.
-
-The binder result is an intermediate plan. `exportNodeGraph()` in
-`src/graphExporter.ts` lowers that plan to the editor's `Nodes`, `Edges`, and
-`NodeBases` format. The Python adapter below supplies this representation from a
-captured module.
-
-## Exporting a NodeGraph
-
-Generate a registry with the current generator, then export a program:
-
-```powershell
-npm run gen -- --source _build/native_functions.yaml
-npm run graph -- --program examples/add-relu.program.json --registry extensions/GF.Extensions.PyTorch/generated/registry.json --out _build/add-relu.nodegraph.json
-```
-
-Use a local schema matching the installed PyTorch extension. To generate only
-the sample's registry and C++ definitions in a separate directory, use:
-
-```powershell
-npm run gen -- --source _build/native_functions.yaml --out _build/graph-example-extension --include '^(add\.Tensor|relu)$'
-npm run graph -- --program examples/add-relu.program.json --registry _build/graph-example-extension/registry.json --out _build/add-relu.nodegraph.json
-```
-
-The graph command validates document structure, registry profile, and binding
-before writing output. Older registries without editor metadata must be
-regenerated. A binding/validation failure leaves an existing output untouched.
-The program and registry paths cannot also be the output path.
-
-The example exports Generic Inputs (`x`, `y`), Add, ReLU, and Generic Outputs
-(`result`). Add stores `alpha=1` in `Properties`. Connections use current terminal
-keys; optional `None` values are omitted from saved properties. Nodes receive
-fresh instance UUIDs on each export and a layout based on dependency depth.
-Repeated operations share their implementation's `NodeBases` snapshot while
-retaining separate instances.
-
-Import `_build/add-relu.nodegraph.json` in GemmaFusionSuite with the matching
-extension installed. The file defines an interface with tensor inputs; it does
-not embed test tensors or model weights. Supply `x` and `y` through the graph's
-input mechanism to execute it. With `x=[-2, 3]` and `y=[1, -1]`, the expected
-result is `[0, 2]`. Automated tests check serialization, defaults, and connections;
-they do not yet run the graph in the editor.
-
-## Capturing a Python module
-
-`scripts/capture_program.py` uses `torch.export.export(..., strict=True)` to
-capture a module with example inputs, then translates its ATen graph to the
-program format. It follows PyTorch's
-[export graph representation](https://docs.pytorch.org/docs/stable/user_guide/torch_compiler/export/api_reference.html).
-This is a capture frontend for a supported subset, not a general Python parser.
-
-The adapter is tested with Python 3.14 and PyTorch 2.12.1+cpu, matching the release
-of the local libtorch 2.12.1+cu126 installation. For a project-local CPU environment:
-
-```powershell
 python -m venv _build/capture-venv
-_build/capture-venv/Scripts/python.exe -m pip install -r scripts/requirements-capture.txt --index-url https://download.pytorch.org/whl/cpu
+_build/capture-venv/Scripts/python.exe -m pip install torch==2.12.1 --index-url https://download.pytorch.org/whl/cpu
+_build/capture-venv/Scripts/python.exe -m pip install -r scripts/requirements-capture.txt
 ```
 
-A factory supplies the module and its example tensors. It returns `(module,
-args)` or `(module, args, kwargs)`, where `args` is a tuple. For example,
-`examples/add_relu.py:example` returns an evaluation-mode module and two tensors.
-The adapter uses the mode supplied by the factory; it does not switch modes.
+### 1. Generate and build the extension
 
-```powershell
-_build/capture-venv/Scripts/python.exe scripts/capture_program.py --factory examples/add_relu.py:example --out _build/add-relu.captured.program.json
-npm run graph -- --program _build/add-relu.captured.program.json --registry _build/graph-example-extension/registry.json --out _build/add-relu.from-python.nodegraph.json
-```
-
-Use the registry-generation command above first. `--factory` executes the selected
-Python factory and captures the returned module. Input IDs come from graph
-placeholders; outputs are flattened in export order and named `output_0`,
-`output_1`, etc. Original nested Python return structures are not reconstructed.
-Tuple selection maps to the producer's return position rather than an editor
-selection node. The graph compiler still decides whether each exact ATen overload
-has an available extension binding.
-
-The initial adapter accepts flat, static, strided tensor inputs and ATen
-operations producing tensors or tuples of tensors. It rejects lifted parameters,
-buffers, tensor constants, input mutation, symbolic dimensions, non-integer sequences,
-and control-flow operators. Primitive user inputs are rejected because export
-can specialize them to the example values. Literal operator arguments remain
-supported by the program format. Static Python branches may be specialized and
-loops may be unrolled during capture; their original structure is not retained.
-
-Capture records PyTorch version and input shapes, strides, dtypes, devices, and
-gradient flags in `program.capture`. The exporter copies this to an advisory
-`Tora.capture` field. Supply inputs consistent with the capture assumptions:
-the editor does not enforce this metadata and may drop it when re-exporting.
-This metadata is not a complete serialization of PyTorch export guards.
-Tensor contents and model weights are not embedded in the generated graph.
-
-The PyTorch tensor provider implements `ITensor::ReadRegion` with `IArray`
-origin and shape inputs containing one Int64 per dimension. Region reads return
-independent, contiguous CPU tensors with the original dtype and rank. The editor
-formats their values through read-only host access; it displays pages of up to
-256 elements and copies only requested row regions. Device reads require clicking
-Read values. Dense, non-quantized tensors with storage are supported, including
-non-contiguous views. Editing values is not yet implemented.
-
-Rebuild the SDK consumers, Node Editor, and extension together after this
-`ITensor` ABI change; binaries implementing the older interface are incompatible.
-Callers must prevent concurrent mutation during a region read and retain the
-returned tensor while using its host pointer.
-
-Run `scripts\test-tensor-region.cmd` to check native CPU region reads with
-libtorch. It checks coordinates, independent storage, dtypes, views, scalars,
-empty regions, and invalid inputs. It does not test window behavior or GPU
-transfers in the editor.
-
-Run `scripts\test-tensor-region-abi.cmd` with the updated local SDK to check the
-`IArray` ABI boundary, malformed inputs, snapshot ownership, and host access.
-
-TensorEditor displays values on the left and a D3D heatmap panel on the right.
-CPU slices load automatically; use **Read slice** for device tensors. The last two dimensions
-are the image axes; enter indices for the leading dimensions (for example,
-`0, 3` for batch 0, channel 3 of an NCHW tensor), or use Previous/Next. Reading
-a device slice copies that region to CPU. Choose
-Neon, Diverging, or Gray palettes, optional contours, and Auto/Locked ranges.
-Hover shows the original typed value; colors use a floating-point display
-representation. Magenta marks NaN or infinity. Real numeric and Boolean tensors
-with at least two dimensions are supported, up to 4096 per image axis and
-4,194,304 elements per slice. Complex tensors and empty image dimensions are
-reported as unsupported.
-
-For a larger convolution example, run from the repository root:
-
-```powershell
-_build/capture-venv/Scripts/python.exe examples/save_conv2d_features.py
-npm run build
-node examples/conv2d-features.mjs
-```
-
-Open `_build/conv2d-features.nodegraph.json` in the Node Editor. Its 18 nodes load
-the input and weights from `_build/conv2d-features.safetensors`, then run four
-convolution/ReLU stages: 5×5 feature filters, dilated depthwise convolution,
-1×1 channel mixing, and stride-2 downsampling. The two-image input has shape
-`[2, 3, 96, 128]`; the final output is `[2, 6, 48, 64]`. The graph also exposes
-the input and each intermediate activation for inspection. Try slice indices
-`0, 0`, `0, 3`, or `1, 5` on the final tensor, and lock the range to compare channels.
-These are deterministic demonstration filters, not a trained model.
-
-The configuration is in `examples/conv2d-features.json`. Generated graphs store
-an absolute Base Directory for their relative tensor filename; regenerate the
-graph or update that property if moving the files to another machine. Python
-writes reference tensors and summary statistics separately. Run
-`scripts\test-convolution-features.cmd` to compare all four native generated
-convolution/ReLU stages against those references. This does not execute the graph
-inside the Node Editor.
-
-Run the capture and full Python-to-JSON tests after building TypeScript:
-
-```powershell
-npm run build
-_build/capture-venv/Scripts/python.exe -m unittest discover -s tests/python -v
-```
-
-These tests replay the captured operations in PyTorch and compare them with the
-original module. They also exercise both CLIs, but do not execute GemmaFusionSuite.
-
-To download libtorch headers, run:
-
-```bash
-Invoke-WebRequest https://download.pytorch.org/libtorch/cu126/libtorch-win-shared-with-deps-2.12.1%2Bcu126.zip -OutFile libtorch.zip
-Extract-Archive libtorch.zip -DestinationPath libtorch
-```
-
-Currently the path to the libtorch headers is hardcoded in the vcxproj file as `C:/GitHub/libtorch`.
-
-## CLI options
-
-```bash
-npm run gen -- --source <url_or_file> --out <dir> --allowlist <file> --max <n> --include <regex>
-```
-
-Example command which was ran:
-
-```bash
-npm run gen -- --max 200
-```
-
-Flags:
-
-- `--include-internal`
-- `--include-inplace`
-- `--include-out`
-- `--include-methods`
-
-Example (small focused subset):
-
-```bash
-npm run gen -- --max 30 --include "^(add|sub|mul|div|matmul)$"
-```
-
-## Function selection and namespaces
-
-- function selection is controlled by `config/operations.yaml`
-- operations are keyed by exact name: `op` or `op.overload`
-- each overload is configured independently; a bare base name does not select all overloads
-- comments allowed via `#`; set `enabled: false` or remove an operation to exclude it
-- generated order follows source YAML order
-- all matching entries are generated by default; `--max` optionally caps the generated count
-
-Default allowlist path is set in `src/config.ts`.
-
-The catalog contains all 2,590 operations in the PyTorch `main` schema snapshot
-downloaded on 2026-09-18. The original 50 operations have initial categories;
-the remaining entries use `PyTorch::Uncategorized` for manual classification.
-The catalog is a snapshot, so new upstream operations must be added explicitly.
-
-```yaml
-version: 1
-defaults:
-  namespace: PyTorch::Uncategorized
-operations:
-  add.Tensor:
-    namespace: PyTorch::BasicOperators
-  conv2d:
-    namespace: PyTorch::Convolution
-  relu:
-    namespace: PyTorch::Activation
-    displayName: ReLU
-    description: Replace negative values with zero and retain nonnegative values.
-  sigmoid:
-    enabled: false
-    reason: Disabled in this extension
-  tanh: {} # Included, using the default namespace
-```
-
-Namespaces use identifier segments separated by `::`, with no spaces (use
-`BasicOperators`, not `Basic Operators`). Each operation is a mapping; use `{}`
-to inherit defaults. The optional `defaults.namespace` falls back to
-`PyTorch::Uncategorized`. Operation namespaces override that default.
-
-Supported operation fields are `namespace`, `displayName`, `description`, `arguments`, `enabled` (a boolean,
-defaulting to true), and `reason` (a non-empty explanatory string, not emitted
-into C++). `displayName` overrides the node's visible name without changing its
-implementation ID. `description` supplies the node's user-facing help text;
-without it the generator falls back to the PyTorch schema description. Both
-strings are escaped when emitted into C++. Other exception fields must be implemented in the generator
-before use: unknown fields, invalid values, and duplicate keys are rejected.
-Validation errors identify the file and configuration path; YAML syntax and
-duplicate-key errors also include source locations.
-
-The former pipe-separated text format has been replaced by YAML. The `--allowlist`
-option still accepts a custom path, now to a YAML file:
-
-```powershell
-npm run gen -- --allowlist config/operations.yaml
-```
-
-Generated nodes expose `create_metadata()` and call
-`AddNamespace<"PyTorch::Convolution">(metadata)` using the configured value.
-This requires an SDK with the `AddNamespace` bridge helper. Namespace changes do
-not change implementation IDs. The host UI must interpret `[Namespace]` values
-to display the hierarchy.
-
-Generated class names and filenames include a stable signature UUID suffix to
-keep operations such as `add` and `add_` distinct, including on Windows.
-
-Catalog inclusion does not guarantee that every schema compiles with the current
-C++ type mappings or installed libtorch version. Use a matching `--source`, edit
-the allowlist, or use `--include`/`--max` to select the operations you need.
-
-Run `npm test` to check allowlist parsing and namespace generation.
-
-## Fixed integer arguments as scalar ports
-
-The numeric-padding `conv1d` and `conv2d` overloads are enabled. Conv1d exposes
-`Stride`, `Padding`, and `Dilation` as Int64 ports. Conv2d exposes Height and Width
-ports for each setting, in that order. Both also expose `Groups` and optional
-`Bias (optional)`. Their defaults are stride/dilation/groups = 1 and padding = 0.
-
-The YAML specifies the mapping, rather than the renderer recognizing particular
-operation names:
-
-```yaml
-conv2d:
-  namespace: PyTorch::Convolution
-  arguments:
-    stride:
-      ports: [{name: Stride Height}, {name: Stride Width}]
-    padding:
-      ports: [{name: Padding Height}, {name: Padding Width}]
-    dilation:
-      ports: [{name: Dilation Height}, {name: Dilation Width}]
-```
-
-Each mapping must target a non-optional `int[N]` or `SymInt[N]` argument with
-exactly N named ports. Names become terminal keys, so keep them stable after
-graphs are saved. Unknown arguments, duplicate keys and incorrect lengths are
-rejected. Unmapped arguments retain their existing names, types and suffixes.
-For configured operations, concrete integer schema defaults are also registered
-on the generated node inputs so manually created nodes start with usable values.
-
-The registry records each scalar port's source argument, index and length.
-The C++ processor builds an owned `std::array<int64_t, N>` for the libtorch call.
-The compiler expands a scalar across all N ports, or assigns an explicit sequence
-of exactly N elements in order. A scalar integer connection can also feed all N
-ports, while an `items` sequence can connect its elements individually. For
-example, `stride=2` gives `(2, 2)`, while `stride=(2, 1)` gives `(2, 1)`.
-Sequences with the wrong length are rejected; an entire dynamic list cannot be
-connected until array unpacking is supported.
-
-This supports concrete integers, not symbolic shape expressions. String padding
-overloads (`same`/`valid`), generic `convolution`, and variable-length list ports
-remain disabled. Python capture can retain concrete integer lists/tuples, but the
-compiler still requires the target operation to have a supported binding.
-
-Generate a sample with weights supplied as graph inputs:
+Use a local `native_functions.yaml` matching your libtorch release:
 
 ```powershell
 npm run gen -- --source _build/native_functions.yaml
-_build/capture-venv/Scripts/python.exe scripts/capture_program.py --factory examples/conv2d.py:example --out _build/conv2d.program.json
-npm run graph -- --program _build/conv2d.program.json --registry extensions/GF.Extensions.PyTorch/generated/registry.json --out _build/conv2d.nodegraph.json
 ```
 
-Rebuild/reload the extension to use the new processors. The native integration
-test `scripts/test-convolution.cmd` generates the two processors into a separate
-test directory, checks their registered defaults, and compares outputs with
-libtorch for grouped Conv1d and Conv2d with unequal axis settings and optional
-bias. It uses the same VS2026, SDK, libtorch and VCPKG environment as the loader
-tests, plus `_build/native_functions.yaml`. The example graph itself still needs
-an editor import/execution check.
+This writes C++ headers and `registry.json` under
+`extensions/GF.Extensions.PyTorch/generated/`. Build and install the extension
+using the [extension setup](extensions/README.md#getting-started), then load it in
+Gemma Fusion. The extension and registry must come from the same generation.
+See [generation and configuration](docs/generation.md) for schema selection,
+operation filters, and native setup details.
 
-## Reviewing operations with Codex
+### 2. Capture the example model
 
-`scripts/review-operations.mjs` is a local batch workflow. It makes no network or
-model API calls: Codex reads its output using the terminal tool, writes decisions
-to a JSON file, and submits that file back to the program. It does not invoke or
-schedule Codex itself; ask Codex to work through the batches in an active session.
+The supplied example is a Conv2d module followed by an offset and ReLU. This
+command captures its weights and buffers and saves a sample input alongside an
+eager PyTorch reference:
 
 ```powershell
-npm.cmd run review:operations -- init --source _build/native_functions.yaml
-node scripts/review-operations.mjs next --size 100
-node scripts/review-operations.mjs inspect --id 0
-node scripts/review-operations.mjs apply --answers _build/answers.json
-node scripts/review-operations.mjs status
-# After all batches are reviewed:
-node scripts/review-operations.mjs finish
+_build/capture-venv/Scripts/python.exe examples/capture_conv2d_module_input.py
+npm run graph -- --program _build/conv2d-module-with-input.program.json --registry extensions/GF.Extensions.PyTorch/generated/registry.json --out _build/conv2d-module-with-input.nodegraph.json
 ```
 
-Use the `native_functions.yaml` matching the catalog. `init` reads that local
-file; it does not download it. It groups overloads and in-place counterparts
-into families to reduce review tokens, retaining exact signatures for `inspect`.
-Decisions use compact groups of family IDs from the current batch:
+### 3. Run it
 
-```json
-[
-  { "namespace": "PyTorch::Activation", "ids": [0, 1] },
-  { "namespace": "PyTorch::Internal", "ids": [2], "reason": "Internal helper; omit from the node palette." }
-]
-```
+Open `_build/conv2d-module-with-input.nodegraph.json` in the Node Editor and
+execute it. Its four Load Tensor nodes supply the input, weights, bias, and
+offset. The output is a Float32 tensor with shape `[1, 2, 4, 8]`.
+This example has been verified in the Node Editor.
 
-Every batch ID must occur exactly once. A group `reason` disables that family;
-otherwise per-overload schema checks determine eligibility. These checks exclude
-internal and backward operators, in-place/output-buffer mutations, method-only
-schemas, no-return operations, unmapped list-valued ports, optional returns, and argument
-types without a corresponding bridge conversion. This is a conservative
-forward-processing palette, not a claim that those PyTorch operations are bad.
-Configured Conv1d/Conv2d scalar mappings are retained during review; other
-convolution and pooling variants may remain disabled until their argument types
-are supported. Remaining enabled nodes are candidates, not proof of
-C++ compilation or runtime compatibility.
+To run the same model from a terminal, follow the
+[NodeEngine CLI guide](docs/nodeengine.md). It adds text outputs so the result
+can be inspected and compared with the PyTorch reference.
 
-Checkpoints and decisions live in `_build/operation-review` (override with
-`--work`). `next` repeats the pending batch after an interruption; `apply` saves
-progress. `init` resets the checkpoint, so do not rerun it to resume. Only
-`finish` updates the catalog; it requires a complete review and an unchanged
-source catalog, and saves `operations.before.yaml` plus `summary.json` in the
-checkpoint directory. Comments, display names, existing non-default namespaces,
-and prior exclusions are preserved. Every disabled operation receives a reason.
+## Capture your own model
 
-To reconsider a node later, edit its `enabled` and `reason` fields directly.
-The generator obeys the YAML; it does not rerun the review exclusions.
-
-To review display text, initialize a separate checkpoint in `labels` mode:
+Provide a Python factory returning `(module, args)` or `(module, args, kwargs)`.
+Set the module's training/evaluation mode in the factory and use a tuple for
+`args`.
 
 ```powershell
-npm.cmd run review:operations -- init --mode labels --work _build/label-review --source _build/native_functions.yaml
-node scripts/review-operations.mjs next --size 80 --work _build/label-review
-node scripts/review-operations.mjs apply --answers _build/labels.json --work _build/label-review
-node scripts/review-operations.mjs finish --work _build/label-review
+_build/capture-venv/Scripts/python.exe scripts/capture_program.py --factory examples/conv2d_module.py:example --out _build/my-model.program.json
+npm run graph -- --program _build/my-model.program.json --registry extensions/GF.Extensions.PyTorch/generated/registry.json --out _build/my-model.nodegraph.json
 ```
 
-This mode lists only enabled entries, one exact overload per ID, together with
-its signature. Answer every batch with objects containing `ids`, `displayName`,
-and `description`. For example:
+The capture command saves weights to `_build/my-model.program.safetensors`.
+Runtime inputs remain graph inputs; supply tensors matching the capture's
+shapes, dtypes and devices. See [capture and resource handling](docs/capture.md)
+for the full contract.
 
-```json
-[
-  {
-    "ids": [0],
-    "displayName": "Add Tensors",
-    "description": "Add two tensors elementwise, broadcasting compatible shapes."
-  }
-]
-```
+## What is supported?
 
-Use `revisit --id <id>` to correct a completed item before finishing. Display-text
-review changes only the two text fields; categories, enabled flags, exclusion
-reasons, and disabled nodes stay unchanged. All 651 currently enabled operations
-have reviewed display text. Exact schemas remain available in the generated
-manifest for technical reference.
+Tora currently handles a static, straight-line subset of PyTorch with flat tensor
+inputs, tensor outputs, supported literals, and configured fixed-size integer
+arguments. Module parameters, buffers, and tensor constants are saved as CPU
+snapshots. Conv1d and Conv2d expose stride, padding, and dilation as scalar ports.
 
-Reference documentation for text review:
-[PyTorch operations](https://docs.pytorch.org/docs/stable/torch.html),
-[linear algebra](https://docs.pytorch.org/docs/stable/linalg.html), and
-[special functions](https://docs.pytorch.org/docs/stable/special.html).
+The catalog has 651 enabled operations with reviewed names and descriptions.
+That is a set of candidates, not a guarantee that every operation compiles or
+runs with your installed libtorch. Unsupported bindings fail with diagnostics.
 
-## Deterministic IDs
+Dynamic shapes, mutation, control flow, general list ports, automatic conversions,
+and device-placement lowering remain unsupported. Moving only a graph does not
+move its weights: keep program and tensor files together and regenerate the graph
+to update its absolute resource directory.
 
-Implementation IDs are generated from the canonical parsed signature (`schemaSignature`) using SHA-1-derived UUID bytes, then emitted in your `Core::Uuid(...)` constructor format.
+## Documentation
 
-## TODO: 
-
- - Add exclude list support
+- [Capture models and external tensors](docs/capture.md)
+- [Generate and configure the extension](docs/generation.md)
+- [Run graphs with the NodeEngine CLI](docs/nodeengine.md)
+- [Inspect tensors and explore convolution examples](docs/tensors.md)
+- [Program format, binding, and graph export](docs/program-format.md)
+- [Review operation categories and display text](docs/operation-review.md)
+- [Develop and validate Tora](docs/development.md)
